@@ -3,7 +3,7 @@ from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
 
-from comment_parser import CommentParser
+from comment_parser import RawCommentFile
 
 import os
 
@@ -17,17 +17,19 @@ class Program:
         self.service = self.verify_user()
 
         ### --- Get Archived Comments --- ###
+
         with open("data/comments_230511.txt") as coms:
-            arch_comments = coms.readlines()
-        c_parser_raw = CommentParser(arch_comments, type="raw")
+            archive_comments = coms.readlines()
+
+        self.raw_comments = RawCommentFile(archive_comments)
 
         ### --- Get Sheets comments through the API --- ###
 
-        # result = self.get_program(
-        #     sheet_id=self.PROGRAM_SHEET_ID,
-        #     range="Exercises!A1:E"
-        # )
-        # values = '\n'.join(result.get('values', []))
+        result = self.get_program(
+            sheet_id=self.PROGRAM_SHEET_ID,
+            range="Exercises!A1:E"
+        )
+        self.values = '\n'.join(result.get('values', []))
         # c_parser_api = CommentParser(values)
         
     def verify_user(self):
