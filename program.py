@@ -3,6 +3,8 @@ from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
 
+from comment_parser import RawCommentFile
+
 import os
 
 class Program:
@@ -13,8 +15,23 @@ class Program:
 
     def __init__(self):
         self.service = self.verify_user()
-        self.get_program(sheet_id=self.PROGRAM_SHEET_ID)
 
+        ### --- Get Archived Comments --- ###
+
+        with open("data/comments_230511.txt") as coms:
+            archive_comments = coms.readlines()
+
+        self.raw_comments = RawCommentFile(archive_comments)
+
+        ### --- Get Sheets comments through the API --- ###
+
+        result = self.get_program(
+            sheet_id=self.PROGRAM_SHEET_ID,
+            range="Exercises!A1:E"
+        )
+        self.values = '\n'.join(result.get('values', []))
+        # c_parser_api = CommentParser(values)
+        
     def verify_user(self):
         creds = None
         # The file token.json stores the user's access and refresh tokens, and is
@@ -37,11 +54,11 @@ class Program:
         service = build('sheets', 'v4', credentials=creds)
         return(service)
     
-    def get_program(self, sheet_id):
+    def get_program(self, sheet_id, range):
         sheet = self.service.spreadsheets()
         result = sheet.values().get(
             spreadsheetId=sheet_id,
-            range="Exercises!A1:E"
+            range=range
         ).execute()
-        values = result.get('values', [])
-        print(values)
+        return(result)
+        
