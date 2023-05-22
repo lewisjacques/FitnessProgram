@@ -3,7 +3,7 @@ from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
 
-from comment_parser import RawCommentFile
+from comment_parser import RawCommentFile, APIComment
 
 import os
 
@@ -13,26 +13,45 @@ class Program:
     SCOPES = ['https://www.googleapis.com/auth/spreadsheets']
     PROGRAM_SHEET_ID = "1LyZsxwUsc5PSdzQT_2G3HZxty9rWwR-laV48spNrOQI"
 
-    def __init__(self):
+    def __init__(self, comment_file_path:str, api_extract:bool):
+        """
+        Extract comments from requested locations and input them onto
+        a dedicated sheet to keep track of the logging
+
+        Args:
+            comment_file_path (str): file-path to static comments
+            api_extract (bool): trigger to extract meta-data from GSheets
+        """
         self.service = self.verify_user()
 
         ### --- Get Archived Comments --- ###
 
-        with open("data/comments_230511.txt") as coms:
-            archive_comments = coms.readlines()
+        with open(comment_file_path) as coms:
+            archive_comments = ''.join(coms.readlines())
 
         self.raw_comments = RawCommentFile(archive_comments)
 
         ### --- Get Sheets comments through the API --- ###
 
-        result = self.get_program(
-            sheet_id=self.PROGRAM_SHEET_ID,
-            range="Exercises!A1:E"
-        )
-        self.values = '\n'.join(result.get('values', []))
-        # c_parser_api = CommentParser(values)
+        if api_extract:
+            # self.get_program(
+            #     sheet_id=self.PROGRAM_SHEET_ID,
+            #     range="Exercises!A1:E"
+            # )
+            
+            # values = result.get('values', [])
+            # c_parser_api = APIComment(values)
+            print("Google Sheets API doesn\'t allow this functionality yet")
+
+        ### --- Write Comments to Sheet --- ###
+
+        for com in self.raw_comments.parsed_comments:
+            print(com.print_comment())
         
     def verify_user(self):
+        """
+        Verify permissions to the Google Sheet
+        """
         creds = None
         # The file token.json stores the user's access and refresh tokens, and is
         # created automatically when the authorization flow completes first
@@ -54,11 +73,19 @@ class Program:
         service = build('sheets', 'v4', credentials=creds)
         return(service)
     
-    def get_program(self, sheet_id, range):
+    def get_program(self, sheet_id:str, range:str):
+        """
+        Function to return all cell data in a given range
+
+        Args:
+            sheet_id (str): Google sheets ID
+            range (str): Worksheet range
+        """
         sheet = self.service.spreadsheets()
-        result = sheet.values().get(
+        self.result = sheet.values()
+        self.get_result_vals = self.result.get(
             spreadsheetId=sheet_id,
             range=range
-        ).execute()
-        return(result)
+        )
+
         

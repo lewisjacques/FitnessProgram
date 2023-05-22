@@ -30,8 +30,8 @@ class RawCommentFile:
         fr'[0-9]{{1,2}})\n*([A-Za-z0-9 !?,.:-;\'()-]*)'
     )
 
-    def __init__(self, comment:str):
-        self.comment = comment
+    def __init__(self, raw_comments:str):
+        self.comment = raw_comments
         # Comment store
         self.parsed_comments = self.parse_comment()
     
@@ -96,3 +96,10 @@ class RawCommentFile:
                 print("Issue with regex string")
         
         return(parsed_comments)
+    
+class APIComment:
+    """
+    Not currently viable through the Google API
+    """
+    def __init__(self):
+        return
