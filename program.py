@@ -3,8 +3,14 @@ from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
 
+from gspread_dataframe import set_with_dataframe
+from pydrive.auth import GoogleAuth
+from pydrive.drive import GoogleDrive
+
 from comment_parser import RawCommentFile, APIComment
 
+import pandas as pd
+import gspread
 import os
 
 class Program:
@@ -43,10 +49,53 @@ class Program:
             # c_parser_api = APIComment(values)
             print("Google Sheets API doesn\'t allow this functionality yet")
 
-        ### --- Write Comments to Sheet --- ###
-
+        ### --- Build Data-Frame --- ###
+        
+        # Convert parsed comments into a dataframe
+        comment_df = pd.DataFrame(
+            columns=[
+                "Sheet",
+                "Cell",
+                "Cell Data",
+                "Time-Stamp",
+                "Comment"
+            ]
+        )
         for com in self.raw_comments.parsed_comments:
-            print(com.print_comment())
+            comment_df = pd.concat(
+                [
+                    pd.DataFrame({
+                        "Sheet": com.sheet,
+                        "Cell": com.cell,
+                        "Cell Data": com.exercise,
+                        "Time-Stamp": com.datetime,
+                        "Comment": com.comment
+                    }, index=[0]),
+                    comment_df
+                ],
+                ignore_index=True
+            )
+
+        ### --- Write Data-Frame to Sheet --- ###
+
+        gc = gspread.authorize(self.creds)
+
+        gauth = GoogleAuth()
+        # drive = GoogleDrive(gauth)
+
+        # Open training program
+        gs = gc.open_by_key("1LyZsxwUsc5PSdzQT_2G3HZxty9rWwR-laV48spNrOQI")
+        # Select comment sheet
+        worksheet = gs.worksheet('Comments')
+        worksheet.clear()
+
+        set_with_dataframe(
+            worksheet=worksheet, 
+            dataframe=comment_df, 
+            include_index=False,
+            include_column_header=True, 
+            resize=True
+        )
         
     def verify_user(self):
         """
@@ -71,6 +120,7 @@ class Program:
                 token.write(creds.to_json())
 
         service = build('sheets', 'v4', credentials=creds)
+        self.creds = creds
         return(service)
     
     def get_program(self, sheet_id:str, range:str):

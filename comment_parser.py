@@ -9,13 +9,13 @@ class Comment:
         self.comment = txt
 
     def print_comment(self):
-        print(f"""
-    Sheet: {self.sheet}
-    Cell: {self.cell}
-    Exercise: {self.exercise}
-    Time-Stamp: {self.datetime}
-    Comment: {self.comment}
-        """)
+        print(
+            f"\tSheet: {self.sheet}\n",
+            f"\tCell: {self.cell}\n",
+            f"\tCell Data: {self.exercise}\n",
+            f"\tTime-Stamp: {self.datetime}\n",
+            f"\tComment: {self.comment}"
+        )
 
 class RawCommentFile:
     USERS = "|".join(("Lewis W","Lewis Waite"))
@@ -85,13 +85,15 @@ class RawCommentFile:
 
                 c_date = com[3]
                 c_txt = com[4]
-                parsed_comments.append(Comment(
+
+                comment = Comment(
                     sheet=c_sheet, 
                     cell=c_cell, 
                     ex=c_exercise, 
                     dt=c_date, 
                     txt=c_txt
-                ))
+                )
+                parsed_comments.append(comment)
             except KeyError:
                 print("Issue with regex string")
         
