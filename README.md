@@ -1,5 +1,6 @@
 # FitnessProgram
-Building out functionality to improve the usability and efficiency of my Google Sheets training program using Google's APIs
+Building out functionality to improve the usability and efficiency of my Google Sheets training program using Google's APIs  
+> Run with *"python3 update_program.py --raw_comments="data/comments_230511.txt"*
 
 ### RawCommentFile
 A class that handles raw test output within the Google Sheets UI
