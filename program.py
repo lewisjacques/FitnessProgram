@@ -7,7 +7,7 @@ from gspread_dataframe import set_with_dataframe
 from pydrive.auth import GoogleAuth
 from pydrive.drive import GoogleDrive
 
-from comment_parser import RawCommentFile, APIComment
+from comment import RawCommentFile, APIComment
 
 import pandas as pd
 import gspread
