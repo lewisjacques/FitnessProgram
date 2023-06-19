@@ -4,8 +4,6 @@ from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
 
 from gspread_dataframe import set_with_dataframe
-from pydrive.auth import GoogleAuth
-from pydrive.drive import GoogleDrive
 
 from comment import RawCommentFile, APIComment
 
@@ -19,7 +17,7 @@ class Program:
     SCOPES = ['https://www.googleapis.com/auth/spreadsheets']
     PROGRAM_SHEET_ID = "1LyZsxwUsc5PSdzQT_2G3HZxty9rWwR-laV48spNrOQI"
 
-    def __init__(self, comment_file_path:str, api_extract:bool):
+    def __init__(self, comment_file_path:str=None, api_extract:bool=False):
         """
         Extract comments from requested locations and input them onto
         a dedicated sheet to keep track of the logging
@@ -30,71 +28,27 @@ class Program:
         """
         self.service = self.verify_user()
 
-        ### --- Get Archived Comments --- ###
-
-        with open(comment_file_path) as coms:
-            archive_comments = ''.join(coms.readlines())
-
-        self.raw_comments = RawCommentFile(archive_comments)
-
         ### --- Get Sheets comments through the API --- ###
-
         if api_extract:
-            # self.get_program(
-            #     sheet_id=self.PROGRAM_SHEET_ID,
-            #     range="Exercises!A1:E"
-            # )
-            
-            # values = result.get('values', [])
-            # c_parser_api = APIComment(values)
+            self.raw_comments = self.get_all_comments()
             print("Google Sheets API doesn\'t allow this functionality yet")
+        ### --- Get Archived Comments --- ###
+        else:
+            assert comment_file_path is not None, \
+                "If not extracting API comments, \raw comment file-path must be given"
+            with open(comment_file_path) as coms:
+                archive_comments = ''.join(coms.readlines())
+
+            self.raw_comments = RawCommentFile(archive_comments)
 
         ### --- Build Data-Frame --- ###
+        self.comment_df = self.build_comment_df()
         
-        # Convert parsed comments into a dataframe
-        comment_df = pd.DataFrame(
-            columns=[
-                "Sheet",
-                "Cell",
-                "Cell Data",
-                "Time-Stamp",
-                "Comment"
-            ]
-        )
-        for com in self.raw_comments.parsed_comments:
-            comment_df = pd.concat(
-                [
-                    pd.DataFrame({
-                        "Sheet": com.sheet,
-                        "Cell": com.cell,
-                        "Cell Data": com.exercise,
-                        "Time-Stamp": com.datetime,
-                        "Comment": com.comment
-                    }, index=[0]),
-                    comment_df
-                ],
-                ignore_index=True
-            )
-
         ### --- Write Data-Frame to Sheet --- ###
-
-        gc = gspread.authorize(self.creds)
-
-        gauth = GoogleAuth()
-        # drive = GoogleDrive(gauth)
-
-        # Open training program
-        gs = gc.open_by_key("1LyZsxwUsc5PSdzQT_2G3HZxty9rWwR-laV48spNrOQI")
-        # Select comment sheet
-        worksheet = gs.worksheet('Comments')
-        worksheet.clear()
-
-        set_with_dataframe(
-            worksheet=worksheet, 
-            dataframe=comment_df, 
-            include_index=False,
-            include_column_header=True, 
-            resize=True
+        self.write_to_sheet(
+            df=self.comment_df,
+            sheet_id="1LyZsxwUsc5PSdzQT_2G3HZxty9rWwR-laV48spNrOQI",
+            tab_name="Comments (via Python)"
         )
         
     def verify_user(self):
@@ -123,19 +77,63 @@ class Program:
         self.creds = creds
         return(service)
     
-    def get_program(self, sheet_id:str, range:str):
+    def build_comment_df(self):
+        # Convert parsed comments into a dataframe
+        comment_df = pd.DataFrame(
+            columns=[
+                "Sheet",
+                "Cell",
+                "Cell Data",
+                "Time-Stamp",
+                "Comment"
+            ]
+        )
+        for com in self.raw_comments.parsed_comments:
+            comment_df = pd.concat(
+                [
+                    pd.DataFrame({
+                        "Sheet": com.sheet,
+                        "Cell": com.cell,
+                        "Cell Data": com.exercise,
+                        "Time-Stamp": com.datetime,
+                        "Comment": com.comment
+                    }, index=[0]),
+                    comment_df
+                ],
+                ignore_index=True
+            )
+        return(comment_df)
+    
+    def write_to_sheet(
+        self, 
+        df:pd.DataFrame, 
+        sheet_id:str, 
+        tab_name:str
+        ):
+
+        gc = gspread.authorize(self.creds)
+
+        # Open training program
+        gs = gc.open_by_key(sheet_id)
+        # Select comment sheet
+        worksheet = gs.worksheet(tab_name)
+        worksheet.clear()
+
+        set_with_dataframe(
+            worksheet=worksheet, 
+            dataframe=df, 
+            include_index=False,
+            include_column_header=True, 
+            resize=True
+        )
+    
+    def get_all_comments(self):
         """
-        Function to return all cell data in a given range
+        Function to return all comments from all sheets through the API
 
         Args:
-            sheet_id (str): Google sheets ID
-            range (str): Worksheet range
         """
-        sheet = self.service.spreadsheets()
-        self.result = sheet.values()
-        self.get_result_vals = self.result.get(
-            spreadsheetId=sheet_id,
-            range=range
-        )
-
-        
+        return
+    
+    def find_working_weight(self, exercise:str):
+        return(self.comment_df.to_json())
