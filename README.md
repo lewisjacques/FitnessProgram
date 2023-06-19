@@ -1,12 +1,14 @@
 # FitnessProgram
 Code with the intention of building out functionality to improve the usability and efficiency of my Google Sheets training program using Google's APIs
 
+Program ('Anyone with the link' access): https://docs.google.com/spreadsheets/d/1LyZsxwUsc5PSdzQT_2G3HZxty9rWwR-laV48spNrOQI/edit#gid=1341696163
+
 *--run_api_port* allows you to run the overall program update along with API functionality to allow requests to be handled through the browser
 
 Running without Google Comments API Extraction  
 >  **"python3 program_update.py --raw_comments="data/comments_230511.txt"** --run_api_port=5555
 
-Runninng with the Google Comments API (Currently Unavailable)
+Running with the Google Comments API (Currently Unavailable)
 > **"python3 program_api.py** --extract_api_comments --run_api_port=5555
 
 ## comment.py
