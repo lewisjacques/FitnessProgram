@@ -9,7 +9,7 @@ Message me on [LinkedIn](https://www.linkedin.com/in/lewiswaite/) for the *crede
 
 The runtime program with API functionality built into the file using **flask** routing
 
-*--run_api_port* allows you to run the overall program update, along with API functionality to allow requests to be handled through the browser
+*--run_api_port* allows you to run the overall program update, along with API functionality to allow requests to be handled through the browser. When running to test it out, try the input 'Dips - Body'
 
 Running without Google Comments API Extraction  
 >  **python3 program_update.py** --raw_comments="data/comments_130623.txt"  --run_api_port=5566
