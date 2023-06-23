@@ -17,7 +17,13 @@ class Program:
     SCOPES = ['https://www.googleapis.com/auth/spreadsheets']
     PROGRAM_SHEET_ID = "1LyZsxwUsc5PSdzQT_2G3HZxty9rWwR-laV48spNrOQI"
 
-    def __init__(self, comment_file_path:str=None, api_extract:bool=False):
+    def __init__(
+            self, 
+            comment_file_path:str=None, 
+            api_extract:bool=False,
+            write_to_sheet:bool=True,
+            write_to_file:str|bool=False
+        ):
         """
         Extract comments from requested locations and input them onto
         a dedicated sheet to keep track of the logging
@@ -30,26 +36,33 @@ class Program:
 
         ### --- Get Sheets comments through the API --- ###
         if api_extract:
-            self.raw_comments = self.get_all_comments()
+            self.raw_comments = self.get_api_comments()
             print("Google Sheets API doesn\'t allow this functionality yet")
+
         ### --- Get Archived Comments --- ###
         else:
-            assert comment_file_path is not None, \
-                "If not extracting API comments, \raw comment file-path must be given"
-            with open(comment_file_path) as coms:
-                archive_comments = ''.join(coms.readlines())
+            if comment_file_path is None:
+                self.comment_df = pd.read_csv("data/parsed_comments.csv")
+            else:
+                with open(comment_file_path) as coms:
+                    archive_comments = ''.join(coms.readlines())
+                # Parse the raw comments
+                self.raw_comments = RawCommentFile(archive_comments)
 
-            self.raw_comments = RawCommentFile(archive_comments)
+                ### --- Build Data-Frame --- ###
+                self.comment_df = self.build_comment_df()
 
-        ### --- Build Data-Frame --- ###
-        self.comment_df = self.build_comment_df()
-        
+        ## -- Write to Local File -- ##
+        if write_to_file:
+            self.comment_df.to_csv("data/parsed_comments.csv", index=False)
+
         ### --- Write Data-Frame to Sheet --- ###
-        self.write_to_sheet(
-            df=self.comment_df,
-            sheet_id="1LyZsxwUsc5PSdzQT_2G3HZxty9rWwR-laV48spNrOQI",
-            tab_name="Comments (via Python)"
-        )
+        if write_to_sheet :
+            self.write_to_sheet(
+                df=self.comment_df,
+                sheet_id="1LyZsxwUsc5PSdzQT_2G3HZxty9rWwR-laV48spNrOQI",
+                tab_name="Comments (via Python)"
+            )
         
     def verify_user(self):
         """
@@ -127,13 +140,18 @@ class Program:
             resize=True
         )
     
-    def get_all_comments(self):
+    def get_api_comments(self):
         """
         Function to return all comments from all sheets through the API
 
         Args:
         """
         return
-    
-    def find_working_weight(self, exercise:str):
-        return(self.comment_df.to_json())
+
+    def get_ex_comments(self, exercise:str):
+        parsed_comments_filtered = \
+            self.comment_df.loc[
+                self.comment_df['Cell Data']==exercise,
+                ['Comment']
+            ].tail(1)
+        return(parsed_comments_filtered)
