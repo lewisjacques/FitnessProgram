@@ -44,20 +44,27 @@ class Program:
             if comment_file_path is None:
                 self.comment_df = pd.read_csv("data/parsed_comments.csv")
             else:
+                print("Opening raw comments")
                 with open(comment_file_path) as coms:
                     archive_comments = ''.join(coms.readlines())
                 # Parse the raw comments
+                print("Parsing raw comments")
                 self.raw_comments = RawCommentFile(archive_comments)
 
                 ### --- Build Data-Frame --- ###
+                print("Building comment data-frame")
                 self.comment_df = self.build_comment_df()
+                print(self.comment_df.head())
+                print(self.comment_df.tail())
 
         ## -- Write to Local File -- ##
         if write_to_file:
+            print("Writing to file")
             self.comment_df.to_csv("data/parsed_comments.csv", index=False)
 
         ### --- Write Data-Frame to Sheet --- ###
         if write_to_sheet :
+            print("Writing to sheet")
             self.write_to_sheet(
                 df=self.comment_df,
                 sheet_id="1LyZsxwUsc5PSdzQT_2G3HZxty9rWwR-laV48spNrOQI",
