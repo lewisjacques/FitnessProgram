@@ -1,29 +1,28 @@
-from google_auth_oauthlib.flow import InstalledAppFlow
-from google.auth.transport.requests import Request
-from google.oauth2.credentials import Credentials
-from googleapiclient.discovery import build
-
-from gspread_dataframe import set_with_dataframe
-
-from comment import RawCommentFile, APIComment
-
+from comment import RawCommentFile
+from sheet import Sheet
 import pandas as pd
-import gspread
 import os
+import re
 
 class Program:
-    
-    # If modifying these scopes, delete the file token.json.
-    SCOPES = ['https://www.googleapis.com/auth/spreadsheets']
-    PROGRAM_SHEET_ID = "1LyZsxwUsc5PSdzQT_2G3HZxty9rWwR-laV48spNrOQI"
+    PROGRAM_SPECS = {
+        "lew": {
+            "legacy_comments": \
+                '/Users/ljw/Projects/FitnessProgram/data/legacy_sheets_comments_lew.txt',
+            'parsed_comments': \
+                "/Users/ljw/Projects/FitnessProgram/data/parsed_comments_lew.csv",
+            'sheet_id':'1zIt0zCCN63AG1taKVXJ-MxmyQ0c0pjHl1Xhr7x5IDes'
+        },
+        "hope": {
+            "legacy_comments": \
+                '/Users/ljw/Projects/FitnessProgram/data/legacy_sheets_comments_hope.txt',
+            'parsed_comments': \
+                "/Users/ljw/Projects/FitnessProgram/data/parsed_comments_hope.csv",
+            'sheet_id':'1CL_1w43DVqBd86OogLwJEgH5VgzuxIqKKlLDY9B2L44'
+        }
+    }
 
-    def __init__(
-            self, 
-            comment_file_path:str=None, 
-            api_extract:bool=False,
-            write_to_sheet:bool=True,
-            write_to_file:str|bool=False
-        ):
+    def __init__(self, program_name:str=None, reparse_legacy:bool=False):
         """
         Extract comments from requested locations and input them onto
         a dedicated sheet to keep track of the logging
@@ -32,126 +31,174 @@ class Program:
             comment_file_path (str): file-path to static comments
             api_extract (bool): trigger to extract meta-data from GSheets
         """
-        self.service = self.verify_user()
+        ### --- Run Set-Up --- ###
 
-        ### --- Get Sheets comments through the API --- ###
-        if api_extract:
-            self.raw_comments = self.get_api_comments()
-            print("Google Sheets API doesn\'t allow this functionality yet")
-
-        ### --- Get Archived Comments --- ###
-        else:
-            if comment_file_path is None:
-                self.comment_df = pd.read_csv("data/parsed_comments.csv")
-            else:
-                with open(comment_file_path) as coms:
-                    archive_comments = ''.join(coms.readlines())
-                # Parse the raw comments
-                self.raw_comments = RawCommentFile(archive_comments)
-
-                ### --- Build Data-Frame --- ###
-                self.comment_df = self.build_comment_df()
-
-        ## -- Write to Local File -- ##
-        if write_to_file:
-            self.comment_df.to_csv("data/parsed_comments.csv", index=False)
-
-        ### --- Write Data-Frame to Sheet --- ###
-        if write_to_sheet :
-            self.write_to_sheet(
-                df=self.comment_df,
-                sheet_id="1LyZsxwUsc5PSdzQT_2G3HZxty9rWwR-laV48spNrOQI",
-                tab_name="Comments (via Python)"
-            )
+        # Pull out variables for the relevant sheet
+        program_specs = self.PROGRAM_SPECS[program_name]
+        parsed_comment_location = program_specs['parsed_comments']
+        legacy_comment_location = program_specs['legacy_comments']
+        sheet_id = program_specs['sheet_id']
         
-    def verify_user(self):
-        """
-        Verify permissions to the Google Sheet
-        """
-        creds = None
-        # The file token.json stores the user's access and refresh tokens, and is
-        # created automatically when the authorization flow completes first
-        if os.path.exists('token.json'):
-            creds = Credentials.from_authorized_user_file('token.json', self.SCOPES)
-        # If there are no (valid) credentials available, let the user log in.
-        if not creds or not creds.valid:
-            if creds and creds.expired and creds.refresh_token:
-                creds.refresh(Request())
-            else:
-                flow = InstalledAppFlow.from_client_secrets_file(
-                    'credentials.json', self.SCOPES
-                )
-                creds = flow.run_local_server(port=0)
-            # Save the credentials for the next run
-            with open('token.json', 'w') as token:
-                token.write(creds.to_json())
+        # Initialise sheet access
+        sheet = Sheet(sheet_id)
 
-        service = build('sheets', 'v4', credentials=creds)
-        self.creds = creds
-        return(service)
-    
-    def build_comment_df(self):
-        # Convert parsed comments into a dataframe
-        comment_df = pd.DataFrame(
-            columns=[
-                "Sheet",
-                "Cell",
-                "Cell Data",
-                "Time-Stamp",
-                "Comment"
-            ]
+        ### --- Get / Generate Archived Comments --- ###
+
+        legacy_exercise_df = self.get_archived_comments(
+            parsed_comment_location,
+            legacy_comment_location,
+            reparse_legacy
         )
-        for com in self.raw_comments.parsed_comments:
-            comment_df = pd.concat(
-                [
-                    pd.DataFrame({
-                        "Sheet": com.sheet,
-                        "Cell": com.cell,
-                        "Cell Data": com.exercise,
-                        "Time-Stamp": com.datetime,
-                        "Comment": com.comment
-                    }, index=[0]),
-                    comment_df
-                ],
-                ignore_index=True
-            )
-        return(comment_df)
-    
-    def write_to_sheet(
+
+        ### --- Parse New Format Months --- ###
+
+        # Get new format months
+        new_format_months = [
+            s.title for s in sheet.g_sheet.worksheets() \
+                if re.search(" \d{2}", s.title) is not None
+        ]
+        
+        # key: month name, value: Month instance
+        month_sessions = sheet.parse_months(new_format_months)
+
+        ### --- Combine Legacy and New Format Month Data --- ###
+
+        all_exercise_df = self.concatenate_all_months(
+            legacy_exercise_df,
+            month_sessions
+        )
+
+        ### --- Enrich Logged Results --- ###
+
+        enriched_logs_df = self.enrich_logs(all_exercise_df)
+
+        # Write newly parsed comments to the sheet
+        sheet.write_to_sheet(
+            df=enriched_logs_df,
+            tab_name="Logs (via Python)"
+        )
+
+    def get_archived_comments(
         self, 
-        df:pd.DataFrame, 
-        sheet_id:str, 
-        tab_name:str
-        ):
-
-        gc = gspread.authorize(self.creds)
-
-        # Open training program
-        gs = gc.open_by_key(sheet_id)
-        # Select comment sheet
-        worksheet = gs.worksheet(tab_name)
-        worksheet.clear()
-
-        set_with_dataframe(
-            worksheet=worksheet, 
-            dataframe=df, 
-            include_index=False,
-            include_column_header=True, 
-            resize=True
-        )
-    
-    def get_api_comments(self):
+        parsed_comment_location:str,
+        legacy_comment_location:str,
+        reparse_legacy:str
+    ):
         """
-        Function to return all comments from all sheets through the API
+        Either pull the archived comments that have been parsed or if reparse_legacy
+        then reparse from the legacy file. Return exercise_df to be appended to by 
+        the new format months. Eventually everything will be stored and stable enough
+        to make this function legacy
 
         Args:
+            parsed_comment_location (str): File location for parsed file
+            legacy_comment_location (str): File location for raw C+P comments from GSheets
+            reparse_legacy (str): Flag to reparse the legacy file or not
         """
-        return
 
-    def get_ex_comments(self, exercise:str):
-        parsed_comments_filtered = \
-            self.comment_df.loc[
-                self.comment_df['Cell Data']==exercise,
-                ['Comment']
-            ].tail(1)
-        return(parsed_comments_filtered)
+        # If we need to parse the legacy comments into a readable format
+        if not os.path.isfile(parsed_comment_location) or reparse_legacy:
+            with open(legacy_comment_location) as coms:
+                legacy_comments = ''.join(coms.readlines())
+
+            # Parse the raw comments getting rid of unnecessary information with re
+            raw_comments = RawCommentFile(legacy_comments)
+            raw_comments.save_to_local(parsed_comment_location)
+            exercise_df = raw_comments.parsed_comment_df
+        else:
+            exercise_df = pd.read_csv(parsed_comment_location)
+        return(exercise_df)
+    
+    def concatenate_all_months(
+        self,
+        exercise_df:pd.DataFrame,
+        month_sessions:dict
+    ):
+        """
+        Concatenate legacy comments with new format months
+
+        Args:
+            exercise_df (pd.DataFrame): Legacy exercise data-frame
+            month_sessions (dict): month_sheet_name:str, month_instance:Month
+        """
+
+        exercise_df = exercise_df.loc[:, [
+            "Date",
+            "Cell Data",
+            "Comment"
+        ]].copy()
+        exercise_df.rename(columns={
+            "Cell Data": "Exercise",
+            "Comment": "Result"
+        }, inplace=True)
+
+        # For each month add every valid exercise to the exercise df
+        for month_instance in month_sessions.values():
+            for session in month_instance.month_sessions:
+                # Not empty and not a rest day
+                if session.is_valid:
+                    for ex, result in session.exercises.items():
+                        # Skipped exercise block
+                        if ex == "":
+                            continue
+                        exercise_df = pd.concat(
+                            [
+                                pd.DataFrame({
+                                    "Date": session.date,
+                                    "Exercise": ex,
+                                    "Result": result
+                                }, index=[0]),
+                                exercise_df
+                            ],
+                            ignore_index=True
+                        )
+        
+        return(exercise_df.sort_values(["Date"]))
+    
+    def find_result(self, result):
+        # If the result was written in kilos
+        if 'kg' in str(result):
+            kg_value = re.findall(r"([0-9]{1,3}([\.][0-9]{1,2})?)kg", str(result))
+            try:
+                return(max([float(v[0]) for v in kg_value]))
+            except IndexError:
+                return(0)
+            # Empty kg value
+            except ValueError:
+                return(0)
+            
+        # If it's not kilos then look for a value or a time
+        else:
+            estimated_weight = re.findall(r"([0-9]{1,3}([\.:][0-9]{1,2})?)", str(result))
+            if estimated_weight == []:
+                return(0)
+            else:
+                # If any values found are times, take the first one
+                if any([":" in v[0] for v in estimated_weight]):
+                    t_val = [v[0] for v in estimated_weight if ":" in v[0]]
+                    return(t_val[0])
+                else:
+                    return(max([float(v[0]) for v in estimated_weight]))
+            
+    def find_status(self, result):
+        if re.search(r"(working)", str(result).lower()) is not None:
+            return("Working")
+        if re.search(r"(peak)", str(result).lower()) is not None:
+            return("Peak")
+        return("Static")
+    
+    def enrich_logs(self, all_exercise_df:pd.DataFrame):
+        """
+        Get accurate estimation of weights lifted
+
+        Args:
+            all_exercise_df (pd.DataFrame): Legacy and new format month logged sessions
+        """
+
+        # Get kg value, if no kg value find take the next largest number
+        all_exercise_df["Weight"] = all_exercise_df["Result"].apply(self.find_result)
+
+        ## - Append set type (Working / Peak / Static, that priority) - ##
+        all_exercise_df["Status"] = all_exercise_df["Result"].apply(self.find_status)
+
+        return(all_exercise_df)
