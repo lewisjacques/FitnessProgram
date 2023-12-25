@@ -24,13 +24,16 @@ class Program:
 
     def __init__(self, program_name:str=None, reparse_legacy:bool=False):
         """
-        Extract comments from requested locations and input them onto
-        a dedicated sheet to keep track of the logging
+        Class to initialise sheet access and then iteratively parse each month,
+        week and session from legacy comments and live Program sheets
 
         Args:
-            comment_file_path (str): file-path to static comments
-            api_extract (bool): trigger to extract meta-data from GSheets
+            program_name (str, optional): Details have to be given in PROGRAM_SPECS. 
+                Defaults to None.
+            reparse_legacy (bool, optional): If legacy comments need parsing, add flag. 
+                Defaults to False.
         """
+
         ### --- Run Set-Up --- ###
 
         # Pull out variables for the relevant sheet
@@ -156,6 +159,14 @@ class Program:
         return(exercise_df.sort_values(["Date"]))
     
     def find_result(self, result):
+        """
+        Get a rough estimat of the exercise result. Long term this will be an 
+        NLP-like system of finding siilar strings
+
+        Args:
+            result (float, int, string): Exercise result value
+        """
+
         # If the result was written in kilos
         if 'kg' in str(result):
             kg_value = re.findall(r"([0-9]{1,3}([\.][0-9]{1,2})?)kg", str(result))
@@ -181,6 +192,15 @@ class Program:
                     return(max([float(v[0]) for v in estimated_weight]))
             
     def find_status(self, result):
+        """
+        Find  whether it was a 
+            Peak set (1 set of 8+ reps)
+            Working set (2+ sets of 8+ reps)
+            Static (not given)
+
+        Args:
+            result (str): Exercise result
+        """
         if re.search(r"(working)", str(result).lower()) is not None:
             return("Working")
         if re.search(r"(peak)", str(result).lower()) is not None:

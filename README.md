@@ -1,38 +1,61 @@
 # FitnessProgram
 Code with the intention of building out functionality to improve the usability and efficiency of my Google Sheets training program using Google's APIs
 
-Fitness Program: [Link to Sheet](https://docs.google.com/spreadsheets/d/1LyZsxwUsc5PSdzQT_2G3HZxty9rWwR-laV48spNrOQI/edit#gid=1341696163) ('Anyone with the link' access)
+Fitness Program: [Link to Example](https://docs.google.com/spreadsheets/d/1zIt0zCCN63AG1taKVXJ-MxmyQ0c0pjHl1Xhr7x5IDes) ('Anyone with the link' access)
 
-Message me on [LinkedIn](https://www.linkedin.com/in/lewiswaite/) for the *credentials.json* file to run the program for the first time
+Message me on [LinkedIn](https://www.linkedin.com/in/lewiswaite/) for the *credentials.json* file to create the token to run the program
 
 ## program_update.py
 
-The runtime program with API functionality built into the file using **flask** routing
+The run-file takes one primary argument, **program_name**. This tells program.py which sheet to look at, along with which legacy files.
+It also takes a secondary argument **reparse_legacy**, if given, the code will reparse the file found in data/legacy_sheets_comments_<p_name>.csv
 
-*--run_api_port* allows you to run the overall program update, along with API functionality to allow requests to be handled through the browser. When running to test it out, try the input 'Dips - Body'
-
-Running without Google Comments API Extraction  
->  **python3 program_update.py** --raw_comments="data/comments_130623.txt"  --run_api_port=5566
-
-Running with the Google Comments API (Currently Unavailable)
-> **"python3 program_api.py** --extract_api_comments --run_api_port=5555
-
-## comment.py
-### RawCommentFile
-A class that handles raw test output taken from the Google Sheets UI
-
-### APIComment
-A class that (will) handle extracting comments from the sheet using REST API calls to the Google Sheets API
-
-#### Current problem
-
-*Comments cannot be read by the Google API as it stands. Notes can be read, but comments are missed out of the meta-data returned by the Sheets API request. This is an issue as all program data Feb-June is in the cell comments.*
+An instance of **Program** will be generated with these parameters which will perform the bulk of the heavy lifting
 
 ## program.py
 
+#### Reason for two parsing methods in **program.py**
+
+*Comments cannot be read by the Google API as it stands. Notes can be read, but comments are missed out of the meta-data returned by the Sheets API request. This is an issue as all program data Feb-October ('lew') is in the cell comments. A new format has been given to all months thereafter, now, any worksheet with the year appended to the end, 'Dec 23' for example, will be parsed*
+
 ### Program
 The Program class exists to 
-- Validate the user running the update
-- Based on the arguments passed to the class, build a class variable 'comment_df' either from a raw text file, or through the Google Sheets API
-- Write the parsed comments to the sheet
-- Write the parsed comments to local
+1. Run access authentication
+2. Get/Parse archived comments if they exist
+3. Parse new format months by generating Session objects stored in a Month object for each sheet
+4. Concatenate all workout information
+5. Enrich comments by estimating session information given in the exercise notes
+6. Write the combined logs to 'Logs via Python'
+
+## sheet.py
+
+### Sheet
+Handles the verification process and creates Month objects for each relevant worksheet
+
+## comment.py
+
+### Comment
+A class that stores high level raw comment information parsed by RawComment
+### RawCommentFile
+A class that handles raw test output taken from the Google Sheets UI
+
+## session.py
+
+### Session
+Object to store all information relating to the individual gym session
+
+Features include  
+- Empty / Rest / Ill / Valid Session Flag
+- Total Exercises
+- Muscle Groups
+
+## month.py
+
+### Month
+Object to store all information relating to the current Month
+
+Features Include
+- Session Length
+- Month Sessions
+- Exercises per Session
+- Sessions Per Week

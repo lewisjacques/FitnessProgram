@@ -3,6 +3,16 @@ import pandas as pd
 
 class Comment:
     def __init__(self, sheet:str, cell:str, ex:str, dt:str, txt:str):
+        """
+        Object to  store all necessary information in a single comment
+
+        Args:
+            sheet (str): Worksheet name
+            cell (str): Cell location
+            ex (str): Exercise (Cell content)
+            dt (str): Datetime as a string
+            txt (str): Comment information
+        """
         self.sheet = sheet
         self.cell = cell
         self.exercise = ex
@@ -34,6 +44,14 @@ class RawCommentFile:
     # 10:39 AM May 2023
 
     def __init__(self, raw_comments:str):
+        """
+        Parse all comments by extracting comment information using the nasty regex code
+        above. When parsed store in one large dataframe to be appended to in Program
+
+        Args:
+            raw_comments (str): String of raw comments extracted by copy and pasting
+                the raw comment list from the Google Sheets web UI
+        """
         parsed_comment_list = self.parse_comment(raw_comments)
         self.parsed_comment_df = self.build_comment_df(parsed_comment_list)
     
@@ -104,11 +122,10 @@ class RawCommentFile:
 
     def build_comment_df(self, parsed_comments:list):
         """
-        Build comment data frame for archived comments
-        that have been parsed using comment.py
+        Append all comment objects to a dataframe if comment is seen to be valid
 
         Args:
-
+            parsed_comments (list): List of Comment objects
         """
         default_comments = [
             "Marked as resolved",

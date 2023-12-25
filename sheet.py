@@ -26,8 +26,11 @@ class Sheet:
 
     def verify_user(self):
         """
-        Verify permissions to the Google Sheet
+        Verify permissions to the Google Sheet using a tokenised method.
+        On my to-do  list to change this to a service account with universal
+        credentials to make access more straight-forward
         """
+
         creds = None
         # The file token.json stores the user's access and refresh tokens, and is
         # created automatically when the authorization flow completes first
@@ -49,6 +52,13 @@ class Sheet:
         return(creds)
     
     def write_to_sheet(self, df:DataFrame, tab_name:str):
+        """
+        Write data frame to a worksheet
+
+        Args:
+            df (DataFrame): DataFrame provided
+            tab_name (str): Worksheet to  push the data  to
+        """
         # Select comment sheet
         worksheet = self.g_sheet.worksheet(tab_name)
         worksheet.clear()
