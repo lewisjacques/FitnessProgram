@@ -94,7 +94,8 @@ class Session:
     
     def check_incomplete_exercises(self):
         return(
-            sum([1 for e,r in self.session_data.items() \
+            sum(
+                [1 for e,r in self.session_data.items() \
                     if (e != "") and (r == "")]
             )
         )

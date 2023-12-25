@@ -1,17 +1,3 @@
-# Object for a given month
-
-# We want to identify where we expect to see a session
-    # Go to row 4 col B and iterate across
-    # When find a cell that contains '1' stop
-    # Go down the rows until you reach a cell that contains '8' giving you the expected session length
-    # From '1' iterate columns across two at a time storing the top left cell each time until reach end
-        # Build a function with a while loop that can be called for each row with a different starting cell
-    # Starting again from B, go down from '1' session length + 2 and do the above again
-    # Repeat
-
-# For each top left session cell
-    # initialise a session object, inside session if empty return None and discard within month.py
-
 from session  import Session
 from datetime import datetime
 import re
@@ -23,12 +9,15 @@ class Month:
 
         Args:
             month_values (list): List of lists for all values on a given sheet
-            this method prevents having to pass an gspread instance between classes
+                (this method prevents having to pass an gspread instance between classes)
         """
         self.month_values = month_values
+        # Find where day 1 starts in this given month
         day1_column_index = self.find_day1()
+        # Get month header in the sheet
         self.month = self.get_month()
 
+        # Fine the session length for day 1, assume same session length throughout month
         self.session_length = self.find_session_length(day1_column_index)
         self.month_sessions = self.build_sessions(day1_column_index)
 
@@ -43,7 +32,14 @@ class Month:
         self.sessions_per_week = self.total_sessions/total_weeks
         
     def find_day1(self):
-        # Searching through row 4 to find day 1 so we can subsequently find day 8
+        """
+        Iterate through row 4 to find day 1 so we can subsequently find day 8
+        to get hold of the session length
+
+        Raises:
+            Exception: If day 1 not identified
+        """
+        # Searching 
         skip_col_a = True
         day_1_column_index = None
         for col_ind, col_val in enumerate(self.month_values[3]):
@@ -63,6 +59,9 @@ class Month:
         return(day_1_column_index)
     
     def get_month(self):
+        """
+        Get sheet header containing the month
+        """
         month_cell_value = self.month_values[1][1]
         month = re.findall("(\w* \d{4})", month_cell_value)[0]
         month_formatted = datetime.strptime(month, '%B %Y').strftime("%Y-%m")
@@ -70,7 +69,11 @@ class Month:
 
     def find_session_length(self, day_1_column_index:int):
         """
-        Function to find the number of rows in a session for the month
+        Function to find the number of rows in a session for the month.
+
+        Iterate through rows through the column that has day 1 to look for day 8
+        to ultimately calculate the number of columns per session. This is important
+        if session structure changes month-to-month
 
         Args:
             day_1_column_index (int)
@@ -79,9 +82,6 @@ class Month:
             Exception: If date headers are invalid for matching
         """
                 
-        # Iterate through rows through the column that has day 1 to look for day 8
-        # to ultimately calculate the number of columns per session. This is important
-        # if session structure changes month-to-month
         session_length = 0
         for row_ind, row_vals in enumerate(self.month_values):
             if row_ind < 3:
@@ -98,6 +98,9 @@ class Month:
         """
         Starting from Day 1, slice the list of lists so each Session can be stored
         as it's own object
+
+        Args:
+            day_1_column_index (int): Index containing day 1 for the first row
         """
         all_sessions = []
         # Every row that contains a date
@@ -154,8 +157,8 @@ class Month:
         right
 
         Args:
-            row_number (int): _description_
-            column_index_init (int, optional): _description_. Defaults to 1.
+            row_number (int)
+            column_index_init (int, optional): Initialising column index. Defaults to 1.
         """
         
         # Get the first session
@@ -191,6 +194,3 @@ class Month:
                 row_sessions.append(session)
 
         return(row_sessions)
-    
-    def count_rest_days(self):
-        return
