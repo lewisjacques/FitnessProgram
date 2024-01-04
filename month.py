@@ -21,16 +21,19 @@ class Month:
         self.session_length = self.find_session_length(day1_column_index)
         self.month_sessions = self.build_sessions(day1_column_index)
 
-        # Get exercises per session
         self.total_sessions = sum([1 for s in self.month_sessions if s.is_valid])
-        session_lengths = [s.total_ex for s in self.month_sessions]
-        self.ex_per_session = sum(session_lengths)/len(session_lengths)
+        if self.total_sessions != 0:
+            # Get exercises per session
+            session_lengths = [s.total_ex for s in self.month_sessions]
+            self.ex_per_session = sum(session_lengths)/len(session_lengths)
+            # Get sessions per week
+            total_days = len(self.month_sessions)
+            total_weeks = total_days/7
+            self.sessions_per_week = self.total_sessions/total_weeks
+        else:
+            self.ex_per_session = 0
+            self.sessions_per_week = 0
 
-        # Get sessions per week
-        total_days = len(self.month_sessions)
-        total_weeks = total_days/7
-        self.sessions_per_week = self.total_sessions/total_weeks
-        
     def find_day1(self):
         """
         Iterate through row 4 to find day 1 so we can subsequently find day 8
@@ -104,7 +107,7 @@ class Month:
         """
         all_sessions = []
         # Every row that contains a date
-        for row_index in range(3,53,self.session_length):
+        for row_index in range(3,(9+(5*self.session_length)),self.session_length):
             # First row starts depending on where Sunday falls
             if row_index == 3:
                 column_start_index = day_1_column_index
