@@ -1,4 +1,6 @@
 from comment import RawCommentFile
+
+from datetime import datetime, timedelta
 from sheet import Sheet
 import pandas as pd
 import os
@@ -18,7 +20,7 @@ class Program:
                 '/Users/ljw/Projects/FitnessProgram/data/legacy_sheets_comments_hope.txt',
             'parsed_comments': \
                 "/Users/ljw/Projects/FitnessProgram/data/parsed_comments_hope.csv",
-            'sheet_id':'1CL_1w43DVqBd86OogLwJEgH5VgzuxIqKKlLDY9B2L44'
+            'sheet_id':'1SHlHUeLgN4kvV6aFQJ_F1lIzvNPtLEoriatF-0kY6f0'
         }
     }
 
@@ -43,9 +45,9 @@ class Program:
         sheet_id = program_specs['sheet_id']
         
         # Initialise sheet access
-        sheet = Sheet(sheet_id)
+        self.sheet = Sheet(sheet_id)
 
-        ### --- Get / Generate Archived Comments --- ###
+        # ### --- Get / Generate Archived Comments --- ###
 
         legacy_exercise_df = self.get_archived_comments(
             parsed_comment_location,
@@ -53,33 +55,39 @@ class Program:
             reparse_legacy
         )
 
-        ### --- Parse New Format Months --- ###
+        # ### --- Parse New Format Months --- ###
 
         # Get new format months
         new_format_months = [
-            s.title for s in sheet.g_sheet.worksheets() \
+            s.title for s in self.sheet.g_sheet.worksheets() \
                 if re.search(" \d{2}", s.title) is not None
         ]
         
         # key: month name, value: Month instance
-        month_sessions = sheet.parse_months(new_format_months)
+        month_sessions = self.sheet.parse_months(new_format_months)
 
-        ### --- Combine Legacy and New Format Month Data --- ###
+        # ### --- Combine Legacy and New Format Month Data --- ###
 
         all_exercise_df = self.concatenate_all_months(
             legacy_exercise_df,
             month_sessions
         )
 
-        ### --- Enrich Logged Results --- ###
+        # ### --- Enrich Logged Results --- ###
 
         enriched_logs_df = self.enrich_logs(all_exercise_df)
 
         # Write newly parsed comments to the sheet
-        sheet.write_to_sheet(
+        self.sheet.write_to_sheet(
             df=enriched_logs_df,
             tab_name="Logs (via Python)"
         )
+
+        ### --- Duplicate Month Template Sheet --- ###
+
+        # Always be one month ahead, so check if an empty month exists
+        if not any([month_inst.total_sessions == 0 for month_inst in month_sessions.values()]):
+            self.add_new_month()
 
     def get_archived_comments(
         self, 
@@ -201,9 +209,11 @@ class Program:
         Args:
             result (str): Exercise result
         """
-        if re.search(r"(working)", str(result).lower()) is not None:
+        if re.search(r"(working)", str(result).lower()) is not None or \
+            re.search(r"(ww)", str(result).lower()) is not None:
             return("Working")
-        if re.search(r"(peak)", str(result).lower()) is not None:
+        if re.search(r"(peak)", str(result).lower()) is not None or \
+            re.search(r"(pw)", str(result).lower()) is not None:
             return("Peak")
         return("Static")
     
@@ -222,3 +232,48 @@ class Program:
         all_exercise_df["Status"] = all_exercise_df["Result"].apply(self.find_status)
 
         return(all_exercise_df)
+    
+    def add_new_month(self):
+        all_sheets = [s.title for s in self.sheet.g_sheet.worksheets()]
+        new_format_month_sheets = [
+            datetime.strptime(s, '%b %y') for s in all_sheets \
+                if re.search(" \d{2}", s) is not None
+        ]
+
+        # If no new format months add the first one
+        if new_format_month_sheets == []:
+            new_month = datetime.now().replace(day=1) + timedelta(weeks=5)
+            new_month_tab_name = new_month.strftime('%b %y')
+        else:
+            # Add 5 weeks to guarentee we're in the next month and then take month, year
+            new_month = max(new_format_month_sheets) + timedelta(weeks=5)
+            new_month_tab_name = new_month.strftime("%b %y")
+
+        # Duplicate template
+        self.sheet.g_sheet.worksheet('TEMPLATE')\
+            .duplicate(insert_sheet_index=len(all_sheets), new_sheet_name=new_month_tab_name)
+        
+        # Find what day the start of the month is and update day 1 accordingly
+        # other Month days will follow through
+        first_day = new_month.replace(day=1).weekday()
+        # Map weekdays to  column values
+        day_mapping = {
+            # Weekday index : column index in template
+            0: "D", # Monday
+            1: "F", # Tuesday
+            2: "H", # Wednesday
+            3: "J", # Thursday
+            4: "L", # Friday
+            5: "N", # Saturday
+            6: "B", # Sunday
+        }
+        # Set day 1
+        self.sheet.g_sheet.worksheet(new_month_tab_name).update(f"{day_mapping[first_day]}4", 1)
+        # Give the template a title
+        self.sheet.g_sheet.worksheet(new_month_tab_name).update("B2", new_month.strftime("%B %Y"))
+        # Give the template weeknumbers
+        self.sheet.g_sheet.worksheet(new_month_tab_name).update("A5", int(new_month.replace(day=1).strftime("%V")))
+
+        # Remove unnecessary pre and post days
+
+        return

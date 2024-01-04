@@ -84,6 +84,7 @@ class Sheet:
 
         month_sessions = {}
         for month_sheet_name in explicit_format_months:
+            print(f"Parsing Sheet: {month_sheet_name}")
             month_data = self.g_sheet.worksheet(month_sheet_name)
             month_instance = Month(month_data.get_all_values())
             month_sessions[month_sheet_name] = month_instance

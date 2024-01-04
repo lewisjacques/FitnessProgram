@@ -10,7 +10,7 @@ if __name__ == "__main__":
     )
     # If specified, write parsed comments to local to file-path
     parser.add_argument(
-        '--program_name', default='lew',
+        '--program_name', default='all',
         help='Program to specify which comments to access'
     )
     parser.add_argument(
@@ -19,12 +19,19 @@ if __name__ == "__main__":
     )
 
     args = parser.parse_args()
-    assert args.program_name in known_programs, \
+    assert args.program_name in known_programs or args.program_name == "all", \
         f'Program name should be one of {known_programs}'
 
     ### --- Make Updates to the Program Sheet --- ###
     
-    prog = Program(
-        program_name=args.program_name,
-        reparse_legacy=args.reparse_legacy
-    )
+    if args.program_name == "all":
+        for p in known_programs:
+            prog = Program(
+                program_name=p,
+                reparse_legacy=args.reparse_legacy
+            )
+    else:
+        prog = Program(
+            program_name=args.program_name,
+            reparse_legacy=args.reparse_legacy
+        )
