@@ -3,6 +3,7 @@ from comment import RawCommentFile
 from datetime import datetime, timedelta
 from sheet import Sheet
 import pandas as pd
+import numpy as np
 import os
 import re
 
@@ -13,14 +14,16 @@ class Program:
                 '/Users/ljw/Projects/FitnessProgram/data/legacy_sheets_comments_lew.txt',
             'parsed_comments': \
                 "/Users/ljw/Projects/FitnessProgram/data/parsed_comments_lew.csv",
-            'sheet_id':'1zIt0zCCN63AG1taKVXJ-MxmyQ0c0pjHl1Xhr7x5IDes'
+            'sheet_id':'1zIt0zCCN63AG1taKVXJ-MxmyQ0c0pjHl1Xhr7x5IDes',
+            'pretty': "Get Chunky"
         },
         "hope": {
             "legacy_comments": \
                 '/Users/ljw/Projects/FitnessProgram/data/legacy_sheets_comments_hope.txt',
             'parsed_comments': \
                 "/Users/ljw/Projects/FitnessProgram/data/parsed_comments_hope.csv",
-            'sheet_id':'1SHlHUeLgN4kvV6aFQJ_F1lIzvNPtLEoriatF-0kY6f0'
+            'sheet_id':'1SHlHUeLgN4kvV6aFQJ_F1lIzvNPtLEoriatF-0kY6f0',
+            'pretty': "Fit Bitch"
         }
     }
 
@@ -37,6 +40,8 @@ class Program:
         """
 
         ### --- Run Set-Up --- ###
+
+        print(f"\n### --- Parsing Program: {self.PROGRAM_SPECS[program_name]['pretty']} --- ###")
 
         # Pull out variables for the relevant sheet
         program_specs = self.PROGRAM_SPECS[program_name]
@@ -87,7 +92,35 @@ class Program:
 
         # Always be one month ahead, so check if an empty month exists
         if not any([month_inst.total_sessions == 0 for month_inst in month_sessions.values()]):
+            print(f"\tAdding new month as the latest has updates")
             self.add_new_month()
+
+        ### --- Add Historical Meta Data --- ###
+
+        total_sessions = {}
+        total_exercises = {}
+        exercises_per_session = {}
+        sessions_per_week = {}
+        
+        for month_name, month_inst in month_sessions.items():
+            total_sessions[month_name] = month_inst.total_sessions
+            exercises_per_session[month_name] = month_inst.ex_per_session
+            sessions_per_week[month_name] = month_inst.sessions_per_week
+            total_exercises[month_name] = month_inst.total_exercises
+
+        sessions_per_month = np.mean(total_sessions.values())
+
+        print(f"total_sessions: {total_sessions} \n")
+        print(f"total_exercises: {total_exercises} \n")
+        print(f"exercises_per_session: {exercises_per_session} \n")
+        print(f"sessions_per_week: {sessions_per_week} \n")
+        print(f"sessions_per_month: {sessions_per_month} \n")
+
+        ### --- Program Cleanup --- ###
+
+        
+
+        print("\tComplete\n")
 
     def get_archived_comments(
         self, 
@@ -274,6 +307,22 @@ class Program:
         # Give the template weeknumbers
         self.sheet.g_sheet.worksheet(new_month_tab_name).update("A5", int(new_month.replace(day=1).strftime("%V")))
 
+
+
+
+
+
+
+
+
         # Remove unnecessary pre and post days
+
+        # Duplicate without formulas
+
+        # If month over run tidy up
+            # Merge unused cells
+            # Set muscle groups in day name
+            # Colour unused cells
+            # Set rest days
 
         return

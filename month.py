@@ -3,7 +3,7 @@ from datetime import datetime
 import re
 
 class Month:
-    def __init__(self, month_values:list):
+    def __init__(self, data:list):
         """
         Obect to store every element of a given month of training
 
@@ -11,7 +11,7 @@ class Month:
             month_values (list): List of lists for all values on a given sheet
                 (this method prevents having to pass an gspread instance between classes)
         """
-        self.month_values = month_values
+        self.month_values = data
         # Find where day 1 starts in this given month
         day1_column_index = self.find_day1()
         # Get month header in the sheet
@@ -25,7 +25,10 @@ class Month:
         if self.total_sessions != 0:
             # Get exercises per session
             session_lengths = [s.total_ex for s in self.month_sessions]
-            self.ex_per_session = sum(session_lengths)/len(session_lengths)
+            self.total_exercises = sum(session_lengths)
+            self.total_sessions = len(session_lengths)
+            self.ex_per_session = self.total_exercises/self.total_sessions
+
             # Get sessions per week
             total_days = len(self.month_sessions)
             total_weeks = total_days/7
@@ -33,6 +36,8 @@ class Month:
         else:
             self.ex_per_session = 0
             self.sessions_per_week = 0
+            self.total_exercises = 0
+            self.total_sessions = 0
 
     def find_day1(self):
         """

@@ -37,7 +37,11 @@ class Session:
         # If day has been recorded as something (including rest and ill)
         if not self.is_none:
             self.title = self.session_data["Session Title"]
-            day = re.findall(r"(\d{1,2})", self.title)[0]
+            try:
+                day = re.findall(r"(\d{1,2})", self.title)[0]
+            except IndexError:
+                print(f"Error with title: {self.title}")
+                raise(IndexError)
             # 0 padding day
             if len(day) == 1:
                 day = f"0{day}"
