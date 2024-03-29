@@ -32,7 +32,9 @@ class Session:
         self.log_empty_session()
         self.log_rest_session()
         self.log_ill_session()
-        self.is_valid = not (self.is_none or self.is_rest or self.is_ill)
+        self.log_injured_session()
+        self.log_holiday_session()
+        self.is_valid = not(self.is_none or self.is_rest or self.is_ill or self.is_holiday or self.is_injured)
 
         # If day has been recorded as something (including rest and ill)
         if not self.is_none:
@@ -49,7 +51,7 @@ class Session:
 
             # Exercise information
             self.empty_ex = self.check_empty_exercises()
-            self.total_ex = session_length - self.empty_ex
+            self.total_ex = session_length - self.empty_ex - 1 # -1 for Date row
             self.incomplete_ex = self.check_incomplete_exercises()
             self.exercises = self.log_exercises()
             self.muscle_groups = self.get_muscle_groups(self.title)
@@ -79,6 +81,18 @@ class Session:
             self.is_ill = True
         else:
             self.is_ill = False
+
+    def log_holiday_session(self):
+        if "holiday" in [k.lower() for k in self.session_data.keys()]:
+            self.is_holiday = True
+        else:
+            self.is_holiday = False
+
+    def log_injured_session(self):
+        if "injured" in [k.lower() for k in self.session_data.keys()]:
+            self.is_injured = True
+        else:
+            self.is_injured = False
 
     def log_exercises(self):
         exercises = {}
@@ -130,3 +144,19 @@ class Session:
     @is_ill.setter
     def is_ill(self, rest_flag:bool):
         self._is_ill = rest_flag
+
+    @property
+    def is_holiday(self) -> bool:
+        return(self._is_holiday)
+    
+    @is_holiday.setter
+    def is_holiday(self, hol_flag:bool):
+        self._is_holiday = hol_flag
+
+    @property
+    def is_injured(self) -> bool:
+        return(self._is_injured)
+    
+    @is_injured.setter
+    def is_injured(self, inj_flags:bool):
+        self._is_injured = inj_flags

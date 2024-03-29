@@ -1,6 +1,7 @@
-from google_auth_oauthlib.flow import InstalledAppFlow
-from google.auth.transport.requests import Request
-from google.oauth2.credentials import Credentials
+# from google_auth_oauthlib.flow import InstalledAppFlow
+# from google.auth.transport.requests import Request
+# from google.oauth2.credentials import Credentials
+from oauth2client.service_account import ServiceAccountCredentials
 
 from gspread_dataframe import set_with_dataframe
 from pandas import DataFrame
@@ -15,6 +16,7 @@ class Sheet:
     SCOPES = [
         'https://www.googleapis.com/auth/spreadsheets'
     ]
+    CREDENTIALS_PATH = 'credentials/sa_program_update.json'
 
     def __init__(self, sheet_id):
         # Verify user or use existing credentials
@@ -26,30 +28,18 @@ class Sheet:
 
     def verify_user(self):
         """
-        Verify permissions to the Google Sheet using a tokenised method.
-        On my to-do  list to change this to a service account with universal
-        credentials to make access more straight-forward
+        Return the credentials object derived from the service account
+        credentials file
+
+        Returns:
+            ServiceAccountCredentials: Google Sheets API credentials
         """
 
-        creds = None
-        # The file token.json stores the user's access and refresh tokens, and is
-        # created automatically when the authorization flow completes first
-        if os.path.exists('token.json'):
-            creds = Credentials.from_authorized_user_file('token.json', self.SCOPES)
-        # If there are no (valid) credentials available, let the user log in.
-        if not creds or not creds.valid:
-            if creds and creds.expired and creds.refresh_token:
-                creds.refresh(Request())
-            else:
-                flow = InstalledAppFlow.from_client_secrets_file(
-                    'credentials.json', self.SCOPES
-                )
-                creds = flow.run_local_server(port=0)
-            # Save the credentials for the next run
-            with open('token.json', 'w') as token:
-                token.write(creds.to_json())
-
-        return(creds)
+        creds = ServiceAccountCredentials.from_json_keyfile_name(
+            self.CREDENTIALS_PATH,
+            self.SCOPES
+        )
+        return creds
     
     def write_to_sheet(self, df:DataFrame, tab_name:str):
         """
@@ -71,7 +61,7 @@ class Sheet:
             resize=True
         )
 
-    def parse_months(self, explicit_format_months:list):
+    def parse_months(self, explicit_format_months:list, verbose:bool):
         """
         Parse months that are using the new format where exercise notes
         are stated explicitly next to the exercise rather than in the comment
@@ -87,7 +77,8 @@ class Sheet:
             print(f"\tParsing Sheet: {month_sheet_name}")
             month_data = self.g_sheet.worksheet(month_sheet_name)
             month_instance = Month(
-                data=month_data.get_all_values()
+                data=month_data.get_all_values(),
+                verbose=verbose
             )
             month_sessions[month_sheet_name] = month_instance
             

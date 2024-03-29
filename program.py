@@ -27,7 +27,7 @@ class Program:
         }
     }
 
-    def __init__(self, program_name:str=None, reparse_legacy:bool=False):
+    def __init__(self, program_name:str=None, reparse_legacy:bool=False, verbose=False):
         """
         Class to initialise sheet access and then iteratively parse each month,
         week and session from legacy comments and live Program sheets
@@ -69,7 +69,10 @@ class Program:
         ]
         
         # key: month name, value: Month instance
-        month_sessions = self.sheet.parse_months(new_format_months)
+        month_sessions = self.sheet.parse_months(
+            new_format_months,
+            verbose=verbose
+        )
 
         # ### --- Combine Legacy and New Format Month Data --- ###
 
@@ -108,17 +111,18 @@ class Program:
             sessions_per_week[month_name] = month_inst.sessions_per_week
             total_exercises[month_name] = month_inst.total_exercises
 
-        sessions_per_month = np.mean(total_sessions.values())
+        sessions_per_month = np.mean([int(v) for v in total_sessions.values() if v!=0])
 
-        print(f"total_sessions: {total_sessions} \n")
-        print(f"total_exercises: {total_exercises} \n")
-        print(f"exercises_per_session: {exercises_per_session} \n")
-        print(f"sessions_per_week: {sessions_per_week} \n")
-        print(f"sessions_per_month: {sessions_per_month} \n")
+        if verbose:
+            for s in total_sessions.keys():
+                print(f"\tParsed Month Meta Data: {s}")
+                print(f"\t\tTotal Sessions: {total_sessions[s]}")
+                print(f"\t\tTotal Exercises: {total_exercises[s]}")
+                print(f"\t\tExercises per Session: {exercises_per_session[s]}")
+                print(f"\t\tSessions per Week: {sessions_per_week[s]}")
+            print(f"\tAverage Sessions per Month: {sessions_per_month} \n")
 
         ### --- Program Cleanup --- ###
-
-        
 
         print("\tComplete\n")
 

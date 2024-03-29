@@ -17,6 +17,10 @@ if __name__ == "__main__":
         '--reparse_legacy', action=argparse.BooleanOptionalAction,
         help="reparse a new copy of the legacy Google Sheet comments"
     )
+    parser.add_argument(
+        '--verbose', action=argparse.BooleanOptionalAction,
+        help="Print out additional meta information about the program"
+    )
 
     args = parser.parse_args()
     assert args.program_name in known_programs or args.program_name == "all", \
@@ -28,10 +32,12 @@ if __name__ == "__main__":
         for p in known_programs:
             prog = Program(
                 program_name=p,
-                reparse_legacy=args.reparse_legacy
+                reparse_legacy=args.reparse_legacy,
+                verbose=args.verbose
             )
     else:
         prog = Program(
             program_name=args.program_name,
-            reparse_legacy=args.reparse_legacy
+            reparse_legacy=args.reparse_legacy,
+            verbose=args.verbose
         )

@@ -3,7 +3,7 @@ from datetime import datetime
 import re
 
 class Month:
-    def __init__(self, data:list):
+    def __init__(self, data:list, verbose=False):
         """
         Obect to store every element of a given month of training
 
@@ -11,6 +11,7 @@ class Month:
             month_values (list): List of lists for all values on a given sheet
                 (this method prevents having to pass an gspread instance between classes)
         """
+
         self.month_values = data
         # Find where day 1 starts in this given month
         day1_column_index = self.find_day1()
@@ -21,23 +22,7 @@ class Month:
         self.session_length = self.find_session_length(day1_column_index)
         self.month_sessions = self.build_sessions(day1_column_index)
 
-        self.total_sessions = sum([1 for s in self.month_sessions if s.is_valid])
-        if self.total_sessions != 0:
-            # Get exercises per session
-            session_lengths = [s.total_ex for s in self.month_sessions]
-            self.total_exercises = sum(session_lengths)
-            self.total_sessions = len(session_lengths)
-            self.ex_per_session = self.total_exercises/self.total_sessions
-
-            # Get sessions per week
-            total_days = len(self.month_sessions)
-            total_weeks = total_days/7
-            self.sessions_per_week = self.total_sessions/total_weeks
-        else:
-            self.ex_per_session = 0
-            self.sessions_per_week = 0
-            self.total_exercises = 0
-            self.total_sessions = 0
+        self.set_month_meta_data(verbose)
 
     def find_day1(self):
         """
@@ -156,6 +141,7 @@ class Month:
                     session_vals[exercise] = 1
             else:
                 session_vals[exercise] = outcome
+
         return(session_vals)
 
     def row_iterate(self, row_number:int, column_index_init:int=0):
@@ -202,3 +188,35 @@ class Month:
                 row_sessions.append(session)
 
         return(row_sessions)
+    
+    def set_month_meta_data(self, verbose):
+        self.total_sessions = sum([1 for s in self.month_sessions if s.is_valid])
+        if self.total_sessions != 0:
+            # Get exercises per session
+            session_lengths = [s.total_ex for s in self.month_sessions if s.is_valid]
+
+            self.total_exercises = sum(session_lengths)
+            self.total_sessions = len(session_lengths)
+            self.ex_per_session = self.total_exercises/self.total_sessions
+
+            # Get sessions per week
+            total_days = len(self.month_sessions)
+            total_weeks = total_days/7
+            self.sessions_per_week = self.total_sessions/total_weeks
+
+        else:
+            self.ex_per_session = 0
+            self.sessions_per_week = 0
+            self.total_exercises = 0
+            self.total_sessions = 0
+            session_lengths = 0
+            total_days = 0
+            total_weeks = 0
+
+        if verbose:
+            print(f"\t\tSession lengths: {session_lengths}")
+            print(f"\t\tTotal days: {total_days}")
+            print(f"\t\tTotal weeks: {total_weeks}")
+            print(f"\t\tTotal sessions: {self.total_sessions}")
+            print(f"\t\tSessions per week: {self.sessions_per_week}")
+            print("\n")
