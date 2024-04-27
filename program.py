@@ -9,21 +9,27 @@ import re
 
 class Program:
     PROGRAM_SPECS = {
-        "lew": {
-            "legacy_comments": \
-                '/Users/ljw/Projects/FitnessProgram/data/legacy_sheets_comments_lew.txt',
-            'parsed_comments': \
-                "/Users/ljw/Projects/FitnessProgram/data/parsed_comments_lew.csv",
-            'sheet_id':'1zIt0zCCN63AG1taKVXJ-MxmyQ0c0pjHl1Xhr7x5IDes',
-            'pretty': "Get Chunky"
-        },
-        "hope": {
-            "legacy_comments": \
-                '/Users/ljw/Projects/FitnessProgram/data/legacy_sheets_comments_hope.txt',
-            'parsed_comments': \
-                "/Users/ljw/Projects/FitnessProgram/data/parsed_comments_hope.csv",
-            'sheet_id':'1SHlHUeLgN4kvV6aFQJ_F1lIzvNPtLEoriatF-0kY6f0',
-            'pretty': "Fit Bitch"
+        # "lew": {
+        #     "legacy_comments": \
+        #         '/Users/ljw/Projects/FitnessProgram/data/legacy_sheets_comments_lew.txt',
+        #     'parsed_comments': \
+        #         "/Users/ljw/Projects/FitnessProgram/data/parsed_comments_lew.csv",
+        #     'sheet_id':'1zIt0zCCN63AG1taKVXJ-MxmyQ0c0pjHl1Xhr7x5IDes',
+        #     'pretty': "Get Chunky"
+        # },
+        # "hope": {
+        #     "legacy_comments": \
+        #         '/Users/ljw/Projects/FitnessProgram/data/legacy_sheets_comments_hope.txt',
+        #     'parsed_comments': \
+        #         "/Users/ljw/Projects/FitnessProgram/data/parsed_comments_hope.csv",
+        #     'sheet_id':'1SHlHUeLgN4kvV6aFQJ_F1lIzvNPtLEoriatF-0kY6f0',
+        #     'pretty': "Fit Bitch"
+        # }
+        "test": {
+            "legacy_comments": None,
+            'parsed_comments': None,
+            'sheet_id':'1QSTaar6vLepLANL2xhz7ShnU2Z9a-mgtpzGPQ0pKv2g',
+            'pretty': "Test"
         }
     }
 
@@ -98,31 +104,9 @@ class Program:
             print(f"\tAdding new month as the latest has updates")
             self.add_new_month()
 
-        ### --- Add Historical Meta Data --- ###
+        ### --- Program Meta --- ###
 
-        total_sessions = {}
-        total_exercises = {}
-        exercises_per_session = {}
-        sessions_per_week = {}
-        
-        for month_name, month_inst in month_sessions.items():
-            total_sessions[month_name] = month_inst.total_sessions
-            exercises_per_session[month_name] = month_inst.ex_per_session
-            sessions_per_week[month_name] = month_inst.sessions_per_week
-            total_exercises[month_name] = month_inst.total_exercises
-
-        sessions_per_month = np.mean([int(v) for v in total_sessions.values() if v!=0])
-
-        if verbose:
-            for s in total_sessions.keys():
-                print(f"\tParsed Month Meta Data: {s}")
-                print(f"\t\tTotal Sessions: {total_sessions[s]}")
-                print(f"\t\tTotal Exercises: {total_exercises[s]}")
-                print(f"\t\tExercises per Session: {exercises_per_session[s]}")
-                print(f"\t\tSessions per Week: {sessions_per_week[s]}")
-            print(f"\tAverage Sessions per Month: {sessions_per_month} \n")
-
-        ### --- Program Cleanup --- ###
+        self.get_program_meta(month_sessions, verbose)
 
         print("\tComplete\n")
 
@@ -144,22 +128,24 @@ class Program:
             reparse_legacy (str): Flag to reparse the legacy file or not
         """
 
-        # If we need to parse the legacy comments into a readable format
-        if not os.path.isfile(parsed_comment_location) or reparse_legacy:
-            with open(legacy_comment_location) as coms:
-                legacy_comments = ''.join(coms.readlines())
+        if legacy_comment_location is not None:
+            # If we need to parse the legacy comments into a readable format
+            if not os.path.isfile(parsed_comment_location) or reparse_legacy:
+                with open(legacy_comment_location) as coms:
+                    legacy_comments = ''.join(coms.readlines())
 
-            # Parse the raw comments getting rid of unnecessary information with re
-            raw_comments = RawCommentFile(legacy_comments)
-            raw_comments.save_to_local(parsed_comment_location)
-            exercise_df = raw_comments.parsed_comment_df
-        else:
-            exercise_df = pd.read_csv(parsed_comment_location)
-        return(exercise_df)
+                # Parse the raw comments getting rid of unnecessary information with re
+                raw_comments = RawCommentFile(legacy_comments)
+                raw_comments.save_to_local(parsed_comment_location)
+                exercise_df = raw_comments.parsed_comment_df
+            else:
+                exercise_df = pd.read_csv(parsed_comment_location)
+            return(exercise_df)
+        else: return(None)
     
     def concatenate_all_months(
         self,
-        exercise_df:pd.DataFrame,
+        exercise_df:pd.DataFrame, # or None
         month_sessions:dict
     ):
         """
@@ -170,15 +156,22 @@ class Program:
             month_sessions (dict): month_sheet_name:str, month_instance:Month
         """
 
-        exercise_df = exercise_df.loc[:, [
-            "Date",
-            "Cell Data",
-            "Comment"
-        ]].copy()
-        exercise_df.rename(columns={
-            "Cell Data": "Exercise",
-            "Comment": "Result"
-        }, inplace=True)
+        if exercise_df is not None:
+            exercise_df = exercise_df.loc[:, [
+                "Date",
+                "Cell Data",
+                "Comment"
+            ]].copy()
+            exercise_df.rename(columns={
+                "Cell Data": "Exercise",
+                "Comment": "Result"
+            }, inplace=True)
+        else:
+            exercise_df = pd.DataFrame(columns=[
+                "Date",
+                "Exercise",
+                "Result"
+            ])
 
         # For each month add every valid exercise to the exercise df
         for month_instance in month_sessions.values():
@@ -319,14 +312,55 @@ class Program:
 
 
 
+
+
+
         # Remove unnecessary pre and post days
 
-        # Duplicate without formulas
-
-        # If month over run tidy up
-            # Merge unused cells
-            # Set muscle groups in day name
-            # Colour unused cells
-            # Set rest days
-
         return
+    
+    def get_program_meta(self, month_sessions:dict, verbose:bool):
+        # --- Add Historical Meta Data --- #
+
+        total_sessions = {}
+        total_exercises = {}
+        exercises_per_session = {}
+        sessions_per_week = {}
+        
+        for month_name, month_inst in month_sessions.items():
+            total_sessions[month_name] = month_inst.total_sessions
+            exercises_per_session[month_name] = month_inst.ex_per_session
+            sessions_per_week[month_name] = month_inst.sessions_per_week
+            total_exercises[month_name] = month_inst.total_exercises
+
+            if verbose:
+                print(f"\tParsed Month Meta Data: {month_name}")
+                print(f"\t\tTotal Sessions: {month_inst.total_sessions}")
+                print(f"\t\tTotal Exercises: {month_inst.total_exercises}")
+                print(f"\t\tExercises per Session: {month_inst.ex_per_session}")
+                print(f"\t\tSessions per Week: {month_inst.sessions_per_week}")
+
+            # Store values in a dataframe to pivot in g-sheets
+            # Sheet, metric, value
+            meta_information = pd.DataFrame(
+                {
+                    "sheet": [month_name*4],
+                    "metric": [
+                        "total_sessions", 
+                        "total_exercises", 
+                        "exercises_per_session",
+                        "sessions_per_week"
+                    ],
+                    "value": [
+                        month_inst.total_sessions,
+                        month_inst.total_exercises,
+                        month_inst.ex_per_session,
+                        month_inst.sessions_per_week
+                    ]
+                }
+            )
+
+        sessions_per_month = np.mean([int(v) for v in total_sessions.values() if v!=0])
+        if verbose:
+            print(f"\tAverage Sessions per Month: {sessions_per_month} \n")
+            print(meta_information)

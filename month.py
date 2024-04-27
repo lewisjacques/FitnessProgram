@@ -24,6 +24,8 @@ class Month:
 
         self.set_month_meta_data(verbose)
 
+        self.clean_month()
+
     def find_day1(self):
         """
         Iterate through row 4 to find day 1 so we can subsequently find day 8
@@ -129,18 +131,35 @@ class Month:
 
         session_title = self.month_values[session_anchor[0]][session_anchor[1]]
         session_vals = {"Session Title": session_title}
+        session_vals["empty_exercise_range"] = dict()
+        session_vals["session_anchor"] = session_anchor
+        empty_sessions = False
+
         for row in range(session_anchor[0]+1, session_anchor[0]+self.session_length):
             exercise = self.month_values[row][session_anchor[1]]
             outcome = self.month_values[row][session_anchor[1]+1]
 
             if exercise == "":
-                try:
+                if "" in session_vals.keys():
                     session_vals[exercise] += 1
                 # One empty exercise encountered already
-                except KeyError:
+                else:
                     session_vals[exercise] = 1
+                    empty_sessions = True
+                    session_vals["empty_exercise_range"].update(
+                        {"start": (row, session_anchor[1])}
+                    )
             else:
                 session_vals[exercise] = outcome
+        
+        if empty_sessions:
+            session_vals["empty_exercise_range"].update(
+                {"end": (
+                    session_anchor[0]+self.session_length-1, 
+                    session_anchor[1]+1
+                )}
+            )
+            print(session_vals["empty_exercise_range"])
 
         return(session_vals)
 
@@ -158,12 +177,19 @@ class Month:
         # Get the first session
         col_val = column_index_init
         starting_coords = (row_number,col_val)
+
+        # s_data keys:
+        #   "Session Title"
+        #   "empty_exercise_range" optional
+        #   exercises
+        # }
         s_data = self.get_session_values(session_anchor=starting_coords)
         session = Session(
             session_data=s_data,
             session_length=self.session_length,
             month=self.month
         )
+
         # If no session at first position the row is empty. 
         # # (Not is_valid as a REST would not be valid)
         if session.is_none:
@@ -178,6 +204,7 @@ class Month:
             # Top left column of the session
             session_anchor = (row_number, col_val)
             s_data = self.get_session_values(session_anchor=session_anchor)
+            
             session = Session(
                 session_data=s_data,
                 session_length=self.session_length,
@@ -220,3 +247,38 @@ class Month:
             print(f"\t\tTotal sessions: {self.total_sessions}")
             print(f"\t\tSessions per week: {self.sessions_per_week}")
             print("\n")
+
+    def clean_month(self, g_sheet, sheet_name):
+        sheetId = g_sheet.worksheet(sheet_name)._properties['sheetId']
+        # Merge unused cells
+        for session in self.month_sessions:
+            # If data exists on the day
+            if not session.is_none:
+                # Merge unused exercise slots
+                if not session.merged:
+                    session.merge_cells(
+                        g_sheet,
+                        sheetId
+                    )
+
+            # If exercise data exists on the day
+            if session.is_valid:
+                # Update title name
+                cur_title = session.title
+                # If not already formatted
+                if not re.search(r"\d{{1,2}} - ", cur_title):
+                    muscle_groups = session.muscle_groups
+
+                    new_title = ", ".join(muscle_groups)
+            
+
+
+
+
+        # Colour unused cells
+            # Colour top empty cell, merge the rest
+
+
+
+
+        return

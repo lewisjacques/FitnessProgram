@@ -1,7 +1,7 @@
 from program import Program
 import argparse
 
-known_programs = ('lew', 'hope',)
+known_programs = ('lew', 'hope', 'test')
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
@@ -10,7 +10,7 @@ if __name__ == "__main__":
     )
     # If specified, write parsed comments to local to file-path
     parser.add_argument(
-        '--program_name', default='all',
+        '--program', default='lew',
         help='Program to specify which comments to access'
     )
     parser.add_argument(
@@ -23,12 +23,12 @@ if __name__ == "__main__":
     )
 
     args = parser.parse_args()
-    assert args.program_name in known_programs or args.program_name == "all", \
+    assert args.program in known_programs or args.program == "all", \
         f'Program name should be one of {known_programs}'
 
     ### --- Make Updates to the Program Sheet --- ###
     
-    if args.program_name == "all":
+    if args.program == "all":
         for p in known_programs:
             prog = Program(
                 program_name=p,
@@ -37,7 +37,7 @@ if __name__ == "__main__":
             )
     else:
         prog = Program(
-            program_name=args.program_name,
+            program_name=args.program,
             reparse_legacy=args.reparse_legacy,
             verbose=args.verbose
         )

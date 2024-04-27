@@ -28,6 +28,10 @@ class Session:
             month (str): Formatted Month given at the top of the month program
         """
         self.session_data = session_data
+        self.empty_exercise_range = session_data["empty_exercise_range"]
+        self.session_anchor = session_data["session_anchor"]
+        self.session_length = session_length
+
         # Meta information
         self.log_empty_session()
         self.log_rest_session()
@@ -39,26 +43,54 @@ class Session:
         # If day has been recorded as something (including rest and ill)
         if not self.is_none:
             self.title = self.session_data["Session Title"]
-            try:
-                day = re.findall(r"(\d{1,2})", self.title)[0]
-            except IndexError:
-                print(f"Error with title: {self.title}")
-                raise(IndexError)
-            # 0 padding day
-            if len(day) == 1:
-                day = f"0{day}"
-            self.date = f"{month}-{day}"
 
             # Exercise information
             self.empty_ex = self.check_empty_exercises()
             self.total_ex = session_length - self.empty_ex - 1 # -1 for Date row
             self.incomplete_ex = self.check_incomplete_exercises()
             self.exercises = self.log_exercises()
-            self.muscle_groups = self.get_muscle_groups(self.title)
+
+            try:
+                day = re.findall(r"(\d{1,2})", self.title)[0]
+            except IndexError:
+                print(f"Error with title: {self.title}")
+                self.print_session_info()
+                raise(IndexError)
+            # 0 padding day
+            if len(day) == 1:
+                day = f"0{day}"
+            self.date = f"{month}-{day}"
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+            # self.muscle_groups = self.get_muscle_groups(self.title)
+        else:
+            self.title = None
+            self.date = None
+            self.empty_ex = None
+            self.total_ex = None
+            self.incomplete_ex = None
+            self.exercises = None
+            self.muscle_groups = None
 
     def print_session_info(self):
         print(f"""\n
             Session Title :: {self.title}\n
+            \tSession Anchor :: {self.session_anchor}
             \tTotal Exercises :: {self.total_ex}
             \tEmpty Exercises :: {self.empty_ex}
             \tIncomplete Exercises :: {self.incomplete_ex}
@@ -118,8 +150,23 @@ class Session:
             )
         )
     
-    def get_muscle_groups(self, session_title:str):
-        return([mg for mg in self.MUSCLE_GROUPS if mg in session_title.upper()])
+    def get_muscle_groups(self):
+        # Get exercise sheet
+
+        # Join exercises logged to exercises sheet to get muscle groups
+
+
+
+
+
+
+
+
+
+
+
+
+        return
 
     @property
     def is_none(self) -> bool:
@@ -160,3 +207,52 @@ class Session:
     @is_injured.setter
     def is_injured(self, inj_flags:bool):
         self._is_injured = inj_flags
+
+    def merge_cells(self, g_sheet, sheet_id):
+        # If the day contains session data
+        if self.is_valid:
+            body = {
+                "requests": [
+                    {
+                        "mergeCells": {
+                            "mergeType": "MERGE_ALL",
+                            "range": {  
+                                "sheetId": sheet_id,
+                                "startRowIndex": self.empty_exercise_range["start"][0],
+                                "endRowIndex": self.empty_exercise_range["end"][0],
+                                "startColumnIndex": self.empty_exercise_range["start"][1],
+                                "endColumnIndex": self.empty_exercise_range["end"][1]
+                            }
+                        }
+                    }
+                ]
+            }
+        # Otherwise just one cell should contain "REST", "ILL" etc.
+        else:
+            top_exercise_row = self.session_anchor[0]+1
+            bot_exercise_row = self.session_anchor[0]+1 + \
+                self.session_length -1
+            top_exercise_col = self.session_anchor[1]
+            bot_exercise_col = self.session_anchor[1] + 1
+
+            body = {
+                "requests": [
+                    {
+                        "mergeCells": {
+                            "mergeType": "MERGE_ALL",
+                            "range": {  
+                                "sheetId": sheet_id,
+                                "startRowIndex": top_exercise_row,
+                                "endRowIndex": bot_exercise_row,
+                                "startColumnIndex": top_exercise_col,
+                                "endColumnIndex": bot_exercise_col
+                            }
+                        }
+                    }
+                ]
+            }
+
+        print(f"MERGING:\n{body}")
+
+        res = g_sheet.batch_update(body)
+        return(res)

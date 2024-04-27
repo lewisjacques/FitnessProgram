@@ -1,6 +1,3 @@
-# from google_auth_oauthlib.flow import InstalledAppFlow
-# from google.auth.transport.requests import Request
-# from google.oauth2.credentials import Credentials
 from oauth2client.service_account import ServiceAccountCredentials
 
 from gspread_dataframe import set_with_dataframe
@@ -80,6 +77,10 @@ class Sheet:
                 data=month_data.get_all_values(),
                 verbose=verbose
             )
+            # month_instance.clean_month(
+            #     self.g_sheet,
+            #     month_sheet_name
+            # )
             month_sessions[month_sheet_name] = month_instance
             
         return(month_sessions)
