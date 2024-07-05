@@ -28,8 +28,8 @@ class Session:
             month (str): Formatted Month given at the top of the month program
         """
         self.session_data = session_data
-        self.empty_exercise_range = session_data["empty_exercise_range"]
-        self.session_anchor = session_data["session_anchor"]
+        self.empty_exercise_range = session_data["meta"]["empty_exercise_range"]
+        self.session_anchor = session_data["meta"]["session_anchor"]
         self.session_length = session_length
 
         # Meta information
@@ -97,7 +97,12 @@ class Session:
         """)
     
     def log_empty_session(self):
-        if all([k.strip()=="" for i,k in enumerate(self.session_data.keys()) if i != 0]):
+        
+        if all([
+            k.strip()=="" for i,k in enumerate(self.session_data.keys()) \
+                if (i != 0) and (k != "meta")
+            ]
+        ):
             self.is_none = True
         else:
             self.is_none = False

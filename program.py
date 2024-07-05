@@ -4,36 +4,20 @@ from datetime import datetime, timedelta
 from sheet import Sheet
 import pandas as pd
 import numpy as np
+import json
 import os
 import re
 
 class Program:
-    PROGRAM_SPECS = {
-        # "lew": {
-        #     "legacy_comments": \
-        #         '/Users/ljw/Projects/FitnessProgram/data/legacy_sheets_comments_lew.txt',
-        #     'parsed_comments': \
-        #         "/Users/ljw/Projects/FitnessProgram/data/parsed_comments_lew.csv",
-        #     'sheet_id':'1zIt0zCCN63AG1taKVXJ-MxmyQ0c0pjHl1Xhr7x5IDes',
-        #     'pretty': "Get Chunky"
-        # },
-        # "hope": {
-        #     "legacy_comments": \
-        #         '/Users/ljw/Projects/FitnessProgram/data/legacy_sheets_comments_hope.txt',
-        #     'parsed_comments': \
-        #         "/Users/ljw/Projects/FitnessProgram/data/parsed_comments_hope.csv",
-        #     'sheet_id':'1SHlHUeLgN4kvV6aFQJ_F1lIzvNPtLEoriatF-0kY6f0',
-        #     'pretty': "Fit Bitch"
-        # }
-        "test": {
-            "legacy_comments": None,
-            'parsed_comments': None,
-            'sheet_id':'1QSTaar6vLepLANL2xhz7ShnU2Z9a-mgtpzGPQ0pKv2g',
-            'pretty': "Test"
-        }
-    }
+    PROGRAM_SPECS_PATH = "program_specs.json"
 
-    def __init__(self, program_name:str=None, reparse_legacy:bool=False, verbose=False):
+    def __init__(
+            self, 
+            program_name:str=None, 
+            reparse_legacy:bool=False, 
+            verbose=False,
+            duplicate=False
+        ):
         """
         Class to initialise sheet access and then iteratively parse each month,
         week and session from legacy comments and live Program sheets
@@ -47,36 +31,42 @@ class Program:
 
         ### --- Run Set-Up --- ###
 
-        print(f"\n### --- Parsing Program: {self.PROGRAM_SPECS[program_name]['pretty']} --- ###")
+        self.program_specs = json.load(self.PROGRAM_SPECS_PATH)
+
+        print(f"\n### --- Parsing Program: {self.program_specs[program_name]['pretty']} --- ###")
 
         # Pull out variables for the relevant sheet
-        program_specs = self.PROGRAM_SPECS[program_name]
+        program_specs = self.program_specs[program_name]
         parsed_comment_location = program_specs['parsed_comments']
         legacy_comment_location = program_specs['legacy_comments']
         sheet_id = program_specs['sheet_id']
-        
-        # Initialise sheet access
-        self.sheet = Sheet(sheet_id)
 
-        # ### --- Get / Generate Archived Comments --- ###
+        # If running the testing program, duplicate by default
+        if program_name == "test":
+            duplicate = True
+        # Initialise sheet access and duplicate sheet if duplicate=True
+        self.sheet = Sheet(program_name, sheet_id, duplicate)
 
+        ### --- Get / Generate Archived Comments --- ###
+
+        # Returns None if no data provided
         legacy_exercise_df = self.get_archived_comments(
             parsed_comment_location,
             legacy_comment_location,
             reparse_legacy
         )
 
-        # ### --- Parse New Format Months --- ###
+        ### --- Parse New Format Months --- ###
 
         # Get new format months
-        new_format_months = [
+        explicit_format_months = [
             s.title for s in self.sheet.g_sheet.worksheets() \
                 if re.search(" \d{2}", s.title) is not None
         ]
         
-        # key: month name, value: Month instance
+        # key: month name, value: Month instance or empty dictionary
         month_sessions = self.sheet.parse_months(
-            new_format_months,
+            explicit_format_months,
             verbose=verbose
         )
 
@@ -100,13 +90,14 @@ class Program:
         ### --- Duplicate Month Template Sheet --- ###
 
         # Always be one month ahead, so check if an empty month exists
+        # not any([]) returns True if there's no month instances at all
         if not any([month_inst.total_sessions == 0 for month_inst in month_sessions.values()]):
             print(f"\tAdding new month as the latest has updates")
             self.add_new_month()
 
         ### --- Program Meta --- ###
 
-        self.get_program_meta(month_sessions, verbose)
+        # self.get_program_meta(month_sessions, verbose)
 
         print("\tComplete\n")
 
@@ -130,7 +121,10 @@ class Program:
 
         if legacy_comment_location is not None:
             # If we need to parse the legacy comments into a readable format
-            if not os.path.isfile(parsed_comment_location) or reparse_legacy:
+            if parsed_comment_location is None or \
+                not os.path.isfile(parsed_comment_location) or \
+                reparse_legacy:
+
                 with open(legacy_comment_location) as coms:
                     legacy_comments = ''.join(coms.readlines())
 
@@ -139,7 +133,11 @@ class Program:
                 raw_comments.save_to_local(parsed_comment_location)
                 exercise_df = raw_comments.parsed_comment_df
             else:
-                exercise_df = pd.read_csv(parsed_comment_location)
+                try:
+                    exercise_df = pd.read_csv(parsed_comment_location)
+                except FileNotFoundError:
+                    print("Parsed legacy file location is given but does not exist")
+                    raise FileNotFoundError
             return(exercise_df)
         else: return(None)
     
@@ -180,8 +178,9 @@ class Program:
                 if session.is_valid:
                     for ex, result in session.exercises.items():
                         # Skipped exercise block
-                        if ex == "":
+                        if ex == "" or ex == "meta":
                             continue
+
                         exercise_df = pd.concat(
                             [
                                 pd.DataFrame({
@@ -239,6 +238,7 @@ class Program:
         Args:
             result (str): Exercise result
         """
+        #! Consolidate regex
         if re.search(r"(working)", str(result).lower()) is not None or \
             re.search(r"(ww)", str(result).lower()) is not None:
             return("Working")
@@ -257,7 +257,6 @@ class Program:
 
         # Get kg value, if no kg value find take the next largest number
         all_exercise_df["Weight"] = all_exercise_df["Result"].apply(self.find_result)
-
         ## - Append set type (Working / Peak / Static, that priority) - ##
         all_exercise_df["Status"] = all_exercise_df["Result"].apply(self.find_status)
 
@@ -265,18 +264,18 @@ class Program:
     
     def add_new_month(self):
         all_sheets = [s.title for s in self.sheet.g_sheet.worksheets()]
-        new_format_month_sheets = [
+        explicit_format_month_sheets = [
             datetime.strptime(s, '%b %y') for s in all_sheets \
                 if re.search(" \d{2}", s) is not None
         ]
 
         # If no new format months add the first one
-        if new_format_month_sheets == []:
-            new_month = datetime.now().replace(day=1) + timedelta(weeks=5)
+        if explicit_format_month_sheets == []:
+            new_month = datetime.now()
             new_month_tab_name = new_month.strftime('%b %y')
         else:
             # Add 5 weeks to guarentee we're in the next month and then take month, year
-            new_month = max(new_format_month_sheets) + timedelta(weeks=5)
+            new_month = max(explicit_format_month_sheets).replace(day=1) + timedelta(weeks=5)
             new_month_tab_name = new_month.strftime("%b %y")
 
         # Duplicate template

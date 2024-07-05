@@ -1,9 +1,16 @@
+from gspread.client import Spreadsheet
+
 from session  import Session
 from datetime import datetime
 import re
 
 class Month:
-    def __init__(self, data:list, verbose=False):
+    def __init__(
+            self, 
+            data:list, 
+            g_sheet:Spreadsheet,
+            sheet_name:str,
+            verbose=False):
         """
         Obect to store every element of a given month of training
 
@@ -13,6 +20,8 @@ class Month:
         """
 
         self.month_values = data
+        self.sheet_id = g_sheet.worksheet(sheet_name)._properties['sheetId']
+
         # Find where day 1 starts in this given month
         day1_column_index = self.find_day1()
         # Get month header in the sheet
@@ -22,9 +31,10 @@ class Month:
         self.session_length = self.find_session_length(day1_column_index)
         self.month_sessions = self.build_sessions(day1_column_index)
 
+        self.clean_month(
+            g_sheet
+        )
         self.set_month_meta_data(verbose)
-
-        self.clean_month()
 
     def find_day1(self):
         """
@@ -130,9 +140,13 @@ class Month:
         """
 
         session_title = self.month_values[session_anchor[0]][session_anchor[1]]
-        session_vals = {"Session Title": session_title}
-        session_vals["empty_exercise_range"] = dict()
-        session_vals["session_anchor"] = session_anchor
+        session_vals = {
+            "Session Title": session_title,
+            "meta": {
+                "empty_exercise_range": dict(),
+                "session_anchor": session_anchor
+            }
+        }
         empty_sessions = False
 
         for row in range(session_anchor[0]+1, session_anchor[0]+self.session_length):
@@ -146,20 +160,34 @@ class Month:
                 else:
                     session_vals[exercise] = 1
                     empty_sessions = True
-                    session_vals["empty_exercise_range"].update(
+                    session_vals["meta"]["empty_exercise_range"].update(
                         {"start": (row, session_anchor[1])}
                     )
             else:
                 session_vals[exercise] = outcome
         
         if empty_sessions:
-            session_vals["empty_exercise_range"].update(
+            session_vals["meta"]["empty_exercise_range"].update(
                 {"end": (
                     session_anchor[0]+self.session_length-1, 
                     session_anchor[1]+1
                 )}
             )
-            print(session_vals["empty_exercise_range"])
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+            # print(session_vals["meta"]["empty_exercise_range"])
 
         return(session_vals)
 
@@ -248,8 +276,16 @@ class Month:
             print(f"\t\tSessions per week: {self.sessions_per_week}")
             print("\n")
 
-    def clean_month(self, g_sheet, sheet_name):
-        sheetId = g_sheet.worksheet(sheet_name)._properties['sheetId']
+    def clean_month(self, g_sheet):
+        return
+
+
+
+
+
+
+
+
         # Merge unused cells
         for session in self.month_sessions:
             # If data exists on the day
@@ -258,7 +294,7 @@ class Month:
                 if not session.merged:
                     session.merge_cells(
                         g_sheet,
-                        sheetId
+                        self.sheet_id
                     )
 
             # If exercise data exists on the day
