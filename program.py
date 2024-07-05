@@ -4,12 +4,12 @@ from datetime import datetime, timedelta
 from sheet import Sheet
 import pandas as pd
 import numpy as np
-import json
+import yaml
 import os
 import re
 
 class Program:
-    PROGRAM_SPECS_PATH = "program_specs.json"
+    PROGRAM_SPECS_PATH = "program_specs.yaml"
 
     def __init__(
             self, 
@@ -31,7 +31,8 @@ class Program:
 
         ### --- Run Set-Up --- ###
 
-        self.program_specs = json.load(self.PROGRAM_SPECS_PATH)
+        with open(self.PROGRAM_SPECS_PATH, 'r') as file:
+            self.program_specs = yaml.safe_load(file)
 
         print(f"\n### --- Parsing Program: {self.program_specs[program_name]['pretty']} --- ###")
 

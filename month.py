@@ -68,7 +68,10 @@ class Month:
         Get sheet header containing the month
         """
         month_cell_value = self.month_values[1][1]
-        month = re.findall("(\w* \d{4})", month_cell_value)[0]
+        try:
+            month = re.findall("(\w* \d{4})", month_cell_value)[0]
+        except IndexError:
+            raise Exception("No month title found, has this sheet been copied manually or edited?")
         month_formatted = datetime.strptime(month, '%B %Y').strftime("%Y-%m")
         return(month_formatted)
 
