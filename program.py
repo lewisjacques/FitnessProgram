@@ -1,6 +1,5 @@
 from comment import RawCommentFile
 
-from datetime import datetime, timedelta
 from sheet import Sheet
 import pandas as pd
 import numpy as np
@@ -13,10 +12,11 @@ class Program:
 
     def __init__(
             self, 
-            program_name:str=None, 
-            reparse_legacy:bool=False, 
-            verbose=False,
-            duplicate=False
+            program_name:str, 
+            reparse_legacy:bool, 
+            verbose:bool,
+            sheet_names:list[str],
+            duplicate:bool=False
         ):
         """
         Class to initialise sheet access and then iteratively parse each month,
@@ -45,8 +45,17 @@ class Program:
         # If running the testing program, duplicate by default
         if program_name == "test":
             duplicate = True
-        # Initialise sheet access and duplicate sheet if duplicate=True
-        self.sheet = Sheet(program_name, sheet_id, duplicate)
+
+        ### --- Create Sheet Instance --- ###
+
+        # Initialise sheet access, duplicate sheet if duplicate=True and parse months
+        self.sheet = Sheet(
+            program_name, 
+            sheet_id, 
+            duplicate, 
+            verbose,
+            sheet_names
+        )
 
         ### --- Get / Generate Archived Comments --- ###
 
@@ -57,25 +66,11 @@ class Program:
             reparse_legacy
         )
 
-        ### --- Parse New Format Months --- ###
-
-        # Get new format months
-        explicit_format_months = [
-            s.title for s in self.sheet.g_sheet.worksheets() \
-                if re.search(" \d{2}", s.title) is not None
-        ]
-        
-        # key: month name, value: Month instance or empty dictionary
-        month_sessions = self.sheet.parse_months(
-            explicit_format_months,
-            verbose=verbose
-        )
-
         # ### --- Combine Legacy and New Format Month Data --- ###
 
         all_exercise_df = self.concatenate_all_months(
             legacy_exercise_df,
-            month_sessions
+            self.sheet.month_instances
         )
 
         # ### --- Enrich Logged Results --- ###
@@ -90,15 +85,24 @@ class Program:
 
         ### --- Duplicate Month Template Sheet --- ###
 
-        # Always be one month ahead, so check if an empty month exists
-        # not any([]) returns True if there's no month instances at all
-        if not any([month_inst.total_sessions == 0 for month_inst in month_sessions.values()]):
-            print(f"\tAdding new month as the latest has updates")
-            self.add_new_month()
+        print(f"\tAdding new month as the latest has updates")
+        all_months = self.sheet.month_instances.values()
+
+        # Always be one month ahead, so check if an empty month doesn't exist
+        # not any([]) returns True to add the first month
+        if not any([month_inst.total_sessions == 0 \
+                    for month_inst in all_months
+            ]):
+            
+            # Add new month and clean the formatting with clean_new_month()
+            self.sheet.add_new_month()
+
+        # Clean the months by merging unused cells and prettifying the program
+        self.sheet.clean_sessions()
 
         ### --- Program Meta --- ###
 
-        # self.get_program_meta(month_sessions, verbose)
+        # self.get_program_meta(self.sheet.month_instances, verbose)
 
         print("\tComplete\n")
 
@@ -145,14 +149,14 @@ class Program:
     def concatenate_all_months(
         self,
         exercise_df:pd.DataFrame, # or None
-        month_sessions:dict
+        month_instances:dict
     ):
         """
         Concatenate legacy comments with new format months
 
         Args:
             exercise_df (pd.DataFrame): Legacy exercise data-frame
-            month_sessions (dict): month_sheet_name:str, month_instance:Month
+            month_instances (dict): month_sheet_name:str, month_instance:Month
         """
 
         if exercise_df is not None:
@@ -173,7 +177,7 @@ class Program:
             ])
 
         # For each month add every valid exercise to the exercise df
-        for month_instance in month_sessions.values():
+        for month_instance in month_instances.values():
             for session in month_instance.month_sessions:
                 # Not empty and not a rest day
                 if session.is_valid:
@@ -263,63 +267,8 @@ class Program:
 
         return(all_exercise_df)
     
-    def add_new_month(self):
-        all_sheets = [s.title for s in self.sheet.g_sheet.worksheets()]
-        explicit_format_month_sheets = [
-            datetime.strptime(s, '%b %y') for s in all_sheets \
-                if re.search(" \d{2}", s) is not None
-        ]
-
-        # If no new format months add the first one
-        if explicit_format_month_sheets == []:
-            new_month = datetime.now()
-            new_month_tab_name = new_month.strftime('%b %y')
-        else:
-            # Add 5 weeks to guarentee we're in the next month and then take month, year
-            new_month = max(explicit_format_month_sheets).replace(day=1) + timedelta(weeks=5)
-            new_month_tab_name = new_month.strftime("%b %y")
-
-        # Duplicate template
-        self.sheet.g_sheet.worksheet('TEMPLATE')\
-            .duplicate(insert_sheet_index=len(all_sheets), new_sheet_name=new_month_tab_name)
-        
-        # Find what day the start of the month is and update day 1 accordingly
-        # other Month days will follow through
-        first_day = new_month.replace(day=1).weekday()
-        # Map weekdays to  column values
-        day_mapping = {
-            # Weekday index : column index in template
-            0: "D", # Monday
-            1: "F", # Tuesday
-            2: "H", # Wednesday
-            3: "J", # Thursday
-            4: "L", # Friday
-            5: "N", # Saturday
-            6: "B", # Sunday
-        }
-        # Set day 1
-        self.sheet.g_sheet.worksheet(new_month_tab_name).update(f"{day_mapping[first_day]}4", 1)
-        # Give the template a title
-        self.sheet.g_sheet.worksheet(new_month_tab_name).update("B2", new_month.strftime("%B %Y"))
-        # Give the template weeknumbers
-        self.sheet.g_sheet.worksheet(new_month_tab_name).update("A5", int(new_month.replace(day=1).strftime("%V")))
-
-
-
-
-
-
-
-
-
-
-
-
-        # Remove unnecessary pre and post days
-
-        return
-    
-    def get_program_meta(self, month_sessions:dict, verbose:bool):
+    # Get program meta data by gathering together the month meta data extracted
+    def get_program_meta(self, month_instances:dict, verbose:bool):
         # --- Add Historical Meta Data --- #
 
         total_sessions = {}
@@ -327,7 +276,7 @@ class Program:
         exercises_per_session = {}
         sessions_per_week = {}
         
-        for month_name, month_inst in month_sessions.items():
+        for month_name, month_inst in month_instances.items():
             total_sessions[month_name] = month_inst.total_sessions
             exercises_per_session[month_name] = month_inst.ex_per_session
             sessions_per_week[month_name] = month_inst.sessions_per_week

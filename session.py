@@ -40,10 +40,10 @@ class Session:
         self.log_holiday_session()
         self.is_valid = not(self.is_none or self.is_rest or self.is_ill or self.is_holiday or self.is_injured)
 
+        self.title = self.session_data["Session Title"]
+
         # If day has been recorded as something (including rest and ill)
         if not self.is_none:
-            self.title = self.session_data["Session Title"]
-
             # Exercise information
             self.empty_ex = self.check_empty_exercises()
             self.total_ex = session_length - self.empty_ex - 1 # -1 for Date row
@@ -79,7 +79,6 @@ class Session:
 
             # self.muscle_groups = self.get_muscle_groups(self.title)
         else:
-            self.title = None
             self.date = None
             self.empty_ex = None
             self.total_ex = None
@@ -97,7 +96,6 @@ class Session:
         """)
     
     def log_empty_session(self):
-        
         if all([
             k.strip()=="" for i,k in enumerate(self.session_data.keys()) \
                 if (i != 0) and (k != "meta")

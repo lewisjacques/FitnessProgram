@@ -16,11 +16,14 @@ class Month:
 
         Args:
             month_values (list): List of lists for all values on a given sheet
-                (this method prevents having to pass an gspread instance between classes)
+                (this method prevents having to pass a gspread instance between classes)
         """
 
         self.month_values = data
         self.sheet_id = g_sheet.worksheet(sheet_name)._properties['sheetId']
+
+        # Initialise g_sheet as a class variable
+        self.g_sheet= g_sheet
 
         # Find where day 1 starts in this given month
         day1_column_index = self.find_day1()
@@ -28,13 +31,11 @@ class Month:
         self.month = self.get_month()
 
         # Fine the session length for day 1, assume same session length throughout month
-        self.session_length = self.find_session_length(day1_column_index)
-        self.month_sessions = self.build_sessions(day1_column_index)
+        print(day1_column_index, self.month_values)
+        self.session_length = Month.find_session_length(day1_column_index, self.month_values)
+        self.month_sessions:Session = self.build_sessions(day1_column_index)
 
-        self.clean_month(
-            g_sheet
-        )
-        self.set_month_meta_data(verbose)
+        self.get_month_meta_data(verbose)
 
     def find_day1(self):
         """
@@ -75,7 +76,7 @@ class Month:
         month_formatted = datetime.strptime(month, '%B %Y').strftime("%Y-%m")
         return(month_formatted)
 
-    def find_session_length(self, day_1_column_index:int):
+    def find_session_length(day_1_column_index:int, month_vals:list):
         """
         Function to find the number of rows in a session for the month.
 
@@ -91,7 +92,7 @@ class Month:
         """
                 
         session_length = 0
-        for row_ind, row_vals in enumerate(self.month_values):
+        for row_ind, row_vals in enumerate(month_vals):
             if row_ind < 3:
                 continue
 
@@ -247,7 +248,7 @@ class Month:
 
         return(row_sessions)
     
-    def set_month_meta_data(self, verbose):
+    def get_month_meta_data(self, verbose):
         self.total_sessions = sum([1 for s in self.month_sessions if s.is_valid])
         if self.total_sessions != 0:
             # Get exercises per session
@@ -279,16 +280,7 @@ class Month:
             print(f"\t\tSessions per week: {self.sessions_per_week}")
             print("\n")
 
-    def clean_month(self, g_sheet):
-        return
-
-
-
-
-
-
-
-
+    def clean_month(self):
         # Merge unused cells
         for session in self.month_sessions:
             # If data exists on the day
@@ -296,7 +288,7 @@ class Month:
                 # Merge unused exercise slots
                 if not session.merged:
                     session.merge_cells(
-                        g_sheet,
+                        self.g_sheet,
                         self.sheet_id
                     )
 

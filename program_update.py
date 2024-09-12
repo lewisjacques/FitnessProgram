@@ -22,6 +22,11 @@ if __name__ == "__main__":
         help="Print out additional meta information about the program"
     )
     parser.add_argument(
+        '--sheet_names', nargs='+', default=["all"],
+        help="Specify which sheet names to parse in parentheses", 
+        required=False
+    )
+    parser.add_argument(
         '--duplicate', action=argparse.BooleanOptionalAction,
         help="Duplicate program before running any updates"
     )
@@ -52,25 +57,29 @@ if __name__ == "__main__":
     #       append an additional month:
     #       - Duplicate the "TEMPLATE" sheet with the closest-future month
     #           that doesn't yet exist
-    #!      - Remove unnecessary pre and post days
-    #   - Handle program meta data:
-    #       - Get values for sessions, exercises etc
-    #!      - Write to home sheet
+    #       - Clean the sheet via Sheet instance
+    #!          - Remove unnecessary pre and post days
     #!  - Tidy all days prior to 'today'
     #!      - Merge cells without exercises in them
     #!      - Add titles to days
+    #   - Handle program meta data:
+    #       - Get values for sessions, exercises etc
+    #!      - Write to home sheet
+
 
     if args.program == "all":
         for p in known_programs:
             prog = Program(
                 program_name=p,
                 reparse_legacy=args.reparse_legacy,
-                verbose=args.verbose
+                verbose=args.verbose,
+                sheet_names=args.sheet_names
             )
     else:
         prog = Program(
             program_name=args.program,
             reparse_legacy=args.reparse_legacy,
             verbose=args.verbose,
+            sheet_names=args.sheet_names,
             duplicate=args.duplicate
         )
