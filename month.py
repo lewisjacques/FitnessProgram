@@ -30,8 +30,7 @@ class Month:
         # Get month header in the sheet
         self.month = self.get_month()
 
-        # Fine the session length for day 1, assume same session length throughout month
-        print(day1_column_index, self.month_values)
+        # Find the session length for day 1, assume same session length throughout month
         self.session_length = Month.find_session_length(day1_column_index, self.month_values)
         self.month_sessions:Session = self.build_sessions(day1_column_index)
 

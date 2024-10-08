@@ -11,7 +11,6 @@ from month import Month
 
 class Sheet:
 
-    # If modifying these scopes, delete the file token.json.
     SCOPES = [
         'https://www.googleapis.com/auth/spreadsheets',
         'https://www.googleapis.com/auth/drive'
@@ -51,17 +50,17 @@ class Sheet:
            f"Please provide sheet_names separated by spaces. Given: {sheet_names}"
 
         # Get sheets with implicit name (Any month that has YY format) to be parsed
-        explicit_format_months = (
+        explicit_format_months = [
             s.title for s in self.g_sheet.worksheets() \
-                if re.search(" \d{2}", s.title) is not None
-        )
+                if re.search(" \d{2}", str(s.title)) is not None
+        ]
         
         # Check input tab names
         assert all([s in ("all", *explicit_format_months) for s in sheet_names]),\
             "Some sheet names provided not found in program"
         
         # Set which worksheets to parse
-        if sheet_names == ["all"]:
+        if sheet_names == ['all']:
             parse_sheets = explicit_format_months
         else:
             parse_sheets = sheet_names
@@ -140,13 +139,33 @@ class Sheet:
 
         return(new_spreadsheet.id)
     
-    def add_new_month(self):
+    def add_new_month(self, all_months, clean=True):
         all_sheets = [s.title for s in self.g_sheet.worksheets()]
+
+
+
+
+
+        # Always be one month ahead, so check if an empty month doesn't exist
+        # not any([]) returns True to add the first month
+
+        # current_month = []
+        # if not any([month_inst.total_sessions == 0 \
+        #             for month_inst in all_months
+        #     ]) #! Latest month doesn't exist:
+
+
+
+
+
+
+
+
+
         explicit_format_month_sheets = [
             datetime.strptime(s, '%b %y') for s in all_sheets \
                 if re.search(" \d{2}", s) is not None
         ]
-
         # If no new format months add the current month
         if explicit_format_month_sheets == []:
             new_month = datetime.now()
@@ -154,6 +173,16 @@ class Sheet:
             # Add 5 weeks to guarentee we're in the next month and then take month, year
             new_month = max(explicit_format_month_sheets).replace(day=1) + timedelta(weeks=5)
 
+
+
+
+
+
+
+
+
+        new_month = datetime.now()
+        print(new_month.strftime("%b %y"))
         new_month_meta = {
             "sheet_name": new_month.strftime("%b %y"),
             "month_datetime": new_month,
@@ -168,7 +197,7 @@ class Sheet:
 
         # Initialise duplicated sheet
         new_ws = self.g_sheet.worksheet(new_month_meta["sheet_name"])
-
+        print("New ws initialised")
         # Find what day the start of the month is and update day 1 accordingly
         # other Month days will follow through
         first_day = new_month.replace(day=1).weekday()
@@ -191,8 +220,9 @@ class Sheet:
         # Give the template weeknumbers
         new_ws.update("A5", int(new_month.replace(day=1).strftime("%V")))
 
-        # Clean sheet
-        self.clean_new_month(new_ws, new_month_meta)
+        if clean:
+            # Clean sheet
+            self.clean_new_month(new_ws, new_month_meta)
 
         return
     

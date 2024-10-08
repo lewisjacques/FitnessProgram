@@ -66,7 +66,6 @@ if __name__ == "__main__":
     #       - Get values for sessions, exercises etc
     #!      - Write to home sheet
 
-
     if args.program == "all":
         for p in known_programs:
             prog = Program(

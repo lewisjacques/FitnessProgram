@@ -88,17 +88,19 @@ class Program:
         print(f"\tAdding new month as the latest has updates")
         all_months = self.sheet.month_instances.values()
 
-        # Always be one month ahead, so check if an empty month doesn't exist
-        # not any([]) returns True to add the first month
-        if not any([month_inst.total_sessions == 0 \
-                    for month_inst in all_months
-            ]):
-            
-            # Add new month and clean the formatting with clean_new_month()
-            self.sheet.add_new_month()
+        # Add new month (if necessary) and clean the formatting with clean_new_month()
+        self.sheet.add_new_month(all_months, clean=False)
+
+
+
+
+
+
+
+
 
         # Clean the months by merging unused cells and prettifying the program
-        self.sheet.clean_sessions()
+        # self.sheet.clean_sessions()
 
         ### --- Program Meta --- ###
 
@@ -202,8 +204,8 @@ class Program:
     
     def find_result(self, result):
         """
-        Get a rough estimat of the exercise result. Long term this will be an 
-        NLP-like system of finding siilar strings
+        Get a rough estimate of the exercise result. Long term this will be an 
+        NLP-like system of finding similar strings
 
         Args:
             result (float, int, string): Exercise result value
