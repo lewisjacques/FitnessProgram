@@ -1,81 +1,88 @@
+from gspread.client import Spreadsheet
+
 from session  import Session
 from datetime import datetime
 import re
 
 class Month:
-    def __init__(self, data:list):
+    def __init__(
+            self, 
+            data:list, 
+            g_sheet:Spreadsheet,
+            sheet_name:str,
+            verbose=False):
         """
         Obect to store every element of a given month of training
 
         Args:
             month_values (list): List of lists for all values on a given sheet
-                (this method prevents having to pass an gspread instance between classes)
+                (this method prevents having to pass a gspread instance between classes)
         """
+
         self.month_values = data
+        self.sheet_name = sheet_name
+        self.sheet_id = g_sheet.worksheet(sheet_name)._properties['sheetId']
+
+        # Initialise g_sheet as a class variable
+        self.g_sheet= g_sheet
+
         # Find where day 1 starts in this given month
-        day1_column_index = self.find_day1()
+        self.day1_column_index = self.find_dayx(day_num=1, row_num=4)
         # Get month header in the sheet
         self.month = self.get_month()
 
-        # Fine the session length for day 1, assume same session length throughout month
-        self.session_length = self.find_session_length(day1_column_index)
-        self.month_sessions = self.build_sessions(day1_column_index)
+        # Find the session length for day 1, assume same session length throughout month
+        self.session_length = Month.find_session_length(
+            self.day1_column_index, 
+            self.month_values
+        )
+        self.month_sessions = self.build_sessions(
+            self.day1_column_index
+        )
 
-        self.total_sessions = sum([1 for s in self.month_sessions if s.is_valid])
-        if self.total_sessions != 0:
-            # Get exercises per session
-            session_lengths = [s.total_ex for s in self.month_sessions]
-            self.total_exercises = sum(session_lengths)
-            self.total_sessions = len(session_lengths)
-            self.ex_per_session = self.total_exercises/self.total_sessions
+        self.get_month_meta_data(verbose)
 
-            # Get sessions per week
-            total_days = len(self.month_sessions)
-            total_weeks = total_days/7
-            self.sessions_per_week = self.total_sessions/total_weeks
-        else:
-            self.ex_per_session = 0
-            self.sessions_per_week = 0
-            self.total_exercises = 0
-            self.total_sessions = 0
-
-    def find_day1(self):
+    def find_dayx(self, day_num:int=1, row_num:int=4):
         """
         Iterate through row 4 to find day 1 so we can subsequently find day 8
         to get hold of the session length
 
         Raises:
-            Exception: If day 1 not identified
+            Exception: If day x not identified
         """
         # Searching 
         skip_col_a = True
-        day_1_column_index = None
-        for col_ind, col_val in enumerate(self.month_values[3]):
+        day_x_column_index = None
+        # row_num 0 index
+        for col_ind, col_val in enumerate(self.month_values[row_num-1]):
             # Skip column A to avoid week numbers
             if skip_col_a:
                 skip_col_a = False
                 continue
 
             # When the first day of the month is found "1" or "1 - ___"
-            if re.search("1( - )?", col_val) is not None:
-                day_1_column_index = col_ind
+            if re.search(f"{day_num}( - )?", col_val) is not None:
+                day_x_column_index = col_ind
         
-        if day_1_column_index is None:
+        if day_x_column_index is None:
             # Convert to custom exception class in future
-            raise Exception("Day 1 Column not identified")
+            raise Exception(f"Day {day_num} Column not identified")
         
-        return(day_1_column_index)
+        return(day_x_column_index)
     
     def get_month(self):
         """
         Get sheet header containing the month
         """
         month_cell_value = self.month_values[1][1]
-        month = re.findall("(\w* \d{4})", month_cell_value)[0]
+        try:
+            month = re.findall("(\w* \d{4})", month_cell_value)[0]
+        except IndexError:
+            raise Exception("No month title found, has this sheet been copied manually or edited?")
         month_formatted = datetime.strptime(month, '%B %Y').strftime("%Y-%m")
         return(month_formatted)
 
-    def find_session_length(self, day_1_column_index:int):
+    def find_session_length(day_1_column_index:int, month_vals:list):
         """
         Function to find the number of rows in a session for the month.
 
@@ -91,7 +98,7 @@ class Month:
         """
                 
         session_length = 0
-        for row_ind, row_vals in enumerate(self.month_values):
+        for row_ind, row_vals in enumerate(month_vals):
             if row_ind < 3:
                 continue
 
@@ -143,19 +150,55 @@ class Month:
         """
 
         session_title = self.month_values[session_anchor[0]][session_anchor[1]]
-        session_vals = {"Session Title": session_title}
+        session_vals = {
+            "Session Title": session_title,
+            "meta": {
+                "empty_exercise_range": dict(),
+                "session_anchor": session_anchor
+            }
+        }
+        empty_sessions = False
+
         for row in range(session_anchor[0]+1, session_anchor[0]+self.session_length):
             exercise = self.month_values[row][session_anchor[1]]
             outcome = self.month_values[row][session_anchor[1]+1]
 
             if exercise == "":
-                try:
+                if "" in session_vals.keys():
                     session_vals[exercise] += 1
                 # One empty exercise encountered already
-                except KeyError:
+                else:
                     session_vals[exercise] = 1
+                    empty_sessions = True
+                    session_vals["meta"]["empty_exercise_range"].update(
+                        {"start": (row, session_anchor[1])}
+                    )
             else:
                 session_vals[exercise] = outcome
+        
+        if empty_sessions:
+            session_vals["meta"]["empty_exercise_range"].update(
+                {"end": (
+                    session_anchor[0]+self.session_length-1, 
+                    session_anchor[1]+1
+                )}
+            )
+
+
+
+
+
+
+
+
+
+
+
+
+
+            #! Work from here for theh  merging of unused cells in a session
+            # print(session_vals["meta"]["empty_exercise_range"])
+
         return(session_vals)
 
     def row_iterate(self, row_number:int, column_index_init:int=0):
@@ -172,12 +215,19 @@ class Month:
         # Get the first session
         col_val = column_index_init
         starting_coords = (row_number,col_val)
+
+        # s_data keys:
+        #   "Session Title"
+        #   "empty_exercise_range" optional
+        #   exercises
+        # }
         s_data = self.get_session_values(session_anchor=starting_coords)
         session = Session(
             session_data=s_data,
             session_length=self.session_length,
             month=self.month
         )
+
         # If no session at first position the row is empty. 
         # # (Not is_valid as a REST would not be valid)
         if session.is_none:
@@ -192,6 +242,7 @@ class Month:
             # Top left column of the session
             session_anchor = (row_number, col_val)
             s_data = self.get_session_values(session_anchor=session_anchor)
+            
             session = Session(
                 session_data=s_data,
                 session_length=self.session_length,
@@ -202,3 +253,69 @@ class Month:
                 row_sessions.append(session)
 
         return(row_sessions)
+    
+    def get_month_meta_data(self, verbose):
+        self.total_sessions = sum([1 for s in self.month_sessions if s.is_valid])
+        if self.total_sessions != 0:
+            # Get exercises per session
+            session_lengths = [s.total_ex for s in self.month_sessions if s.is_valid]
+
+            self.total_exercises = sum(session_lengths)
+            self.total_sessions = len(session_lengths)
+            self.ex_per_session = self.total_exercises/self.total_sessions
+
+            # Get sessions per week
+            total_days = len(self.month_sessions)
+            total_weeks = total_days/7
+            self.sessions_per_week = self.total_sessions/total_weeks
+
+        else:
+            self.ex_per_session = 0
+            self.sessions_per_week = 0
+            self.total_exercises = 0
+            self.total_sessions = 0
+            session_lengths = 0
+            total_days = 0
+            total_weeks = 0
+
+        if verbose:
+            print(f"\t\tSession lengths: {session_lengths}")
+            print(f"\t\tTotal days: {total_days}")
+            print(f"\t\tTotal weeks: {total_weeks}")
+            print(f"\t\tTotal sessions: {self.total_sessions}")
+            print(f"\t\tSessions per week: {self.sessions_per_week}")
+            print("\n")
+
+    def clean_month(self):
+        # Merge unused cells
+        for session in self.month_sessions:
+            # If data exists on the day
+            if not session.is_none:
+                # Merge unused exercise slots
+                if not session.merged:
+                    session.merge_cells(
+                        self.g_sheet,
+                        self.sheet_id
+                    )
+
+            # If exercise data exists on the day
+            if session.is_valid:
+                # Update title name
+                cur_title = session.title
+                # If not already formatted
+                if not re.search(r"\d{{1,2}} - ", cur_title):
+                    muscle_groups = session.muscle_groups
+
+                    new_title = ", ".join(muscle_groups)
+            
+
+
+
+
+        # Colour unused cells
+            # Colour top empty cell, merge the rest
+
+
+
+
+        return

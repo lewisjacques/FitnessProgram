@@ -28,42 +28,79 @@ class Session:
             month (str): Formatted Month given at the top of the month program
         """
         self.session_data = session_data
+        self.empty_exercise_range = session_data["meta"]["empty_exercise_range"]
+        self.session_anchor = session_data["meta"]["session_anchor"]
+        self.session_length = session_length
+
         # Meta information
         self.log_empty_session()
         self.log_rest_session()
         self.log_ill_session()
-        self.is_valid = not (self.is_none or self.is_rest or self.is_ill)
+        self.log_injured_session()
+        self.log_holiday_session()
+        self.is_valid = not(self.is_none or self.is_rest or self.is_ill or self.is_holiday or self.is_injured)
+
+        self.title = self.session_data["Session Title"]
 
         # If day has been recorded as something (including rest and ill)
         if not self.is_none:
-            self.title = self.session_data["Session Title"]
+            # Exercise information
+            self.empty_ex = self.check_empty_exercises()
+            self.total_ex = session_length - self.empty_ex - 1 # -1 for Date row
+            self.incomplete_ex = self.check_incomplete_exercises()
+            self.exercises = self.log_exercises()
+
             try:
                 day = re.findall(r"(\d{1,2})", self.title)[0]
             except IndexError:
                 print(f"Error with title: {self.title}")
+                self.print_session_info()
                 raise(IndexError)
             # 0 padding day
             if len(day) == 1:
                 day = f"0{day}"
             self.date = f"{month}-{day}"
 
-            # Exercise information
-            self.empty_ex = self.check_empty_exercises()
-            self.total_ex = session_length - self.empty_ex
-            self.incomplete_ex = self.check_incomplete_exercises()
-            self.exercises = self.log_exercises()
-            self.muscle_groups = self.get_muscle_groups(self.title)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+            # self.muscle_groups = self.get_muscle_groups(self.title)
+        else:
+            self.date = None
+            self.empty_ex = None
+            self.total_ex = None
+            self.incomplete_ex = None
+            self.exercises = None
+            self.muscle_groups = None
 
     def print_session_info(self):
         print(f"""\n
             Session Title :: {self.title}\n
+            \tSession Anchor :: {self.session_anchor}
             \tTotal Exercises :: {self.total_ex}
             \tEmpty Exercises :: {self.empty_ex}
             \tIncomplete Exercises :: {self.incomplete_ex}
         """)
     
     def log_empty_session(self):
-        if all([k.strip()=="" for i,k in enumerate(self.session_data.keys()) if i != 0]):
+        if all([
+            k.strip()=="" for i,k in enumerate(self.session_data.keys()) \
+                if (i != 0) and (k != "meta")
+            ]
+        ):
             self.is_none = True
         else:
             self.is_none = False
@@ -79,6 +116,18 @@ class Session:
             self.is_ill = True
         else:
             self.is_ill = False
+
+    def log_holiday_session(self):
+        if "holiday" in [k.lower() for k in self.session_data.keys()]:
+            self.is_holiday = True
+        else:
+            self.is_holiday = False
+
+    def log_injured_session(self):
+        if "injured" in [k.lower() for k in self.session_data.keys()]:
+            self.is_injured = True
+        else:
+            self.is_injured = False
 
     def log_exercises(self):
         exercises = {}
@@ -104,8 +153,20 @@ class Session:
             )
         )
     
-    def get_muscle_groups(self, session_title:str):
-        return([mg for mg in self.MUSCLE_GROUPS if mg in session_title.upper()])
+    #! To do:
+        #! Get the muscle groups within the session
+        #! Summarise the session in relation to max lifts etc.
+    
+    def get_muscle_groups(self):
+        #
+        #  Get exercise sheet
+
+        # Join exercises logged to exercises sheet to get muscle groups
+
+        return
+    
+    def summarise_session(self):
+        return
 
     @property
     def is_none(self) -> bool:
@@ -130,3 +191,19 @@ class Session:
     @is_ill.setter
     def is_ill(self, rest_flag:bool):
         self._is_ill = rest_flag
+
+    @property
+    def is_holiday(self) -> bool:
+        return(self._is_holiday)
+    
+    @is_holiday.setter
+    def is_holiday(self, hol_flag:bool):
+        self._is_holiday = hol_flag
+
+    @property
+    def is_injured(self) -> bool:
+        return(self._is_injured)
+    
+    @is_injured.setter
+    def is_injured(self, inj_flags:bool):
+        self._is_injured = inj_flags

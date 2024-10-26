@@ -1,0 +1,25 @@
+# <program_name>:
+#   ### --- Only necessary on old iterations of the program sheets --- ###
+#   <legacy_comments>: Path to Google Sheets comments copied from the UI
+#   <parsed_comments>: Path to the legacy comments parsed file
+
+#   sheet_id: Google Sheet ID with format docs.google.com/spreadsheets/d/<sheet_id>
+#   pretty: Pretty name for logging purposes
+
+lew:
+  legacy_comments: "/Users/ljw/Projects/FitnessProgram/data/legacy_sheets_comments_lew.txt"
+  parsed_comments: "/Users/ljw/Projects/FitnessProgram/data/parsed_comments_lew.csv"
+  sheet_id: 1zIt0zCCN63AG1taKVXJ-MxmyQ0c0pjHl1Xhr7x5IDes
+  pretty: Get Chunky
+
+hope:
+  legacy_comments: "/Users/ljw/Projects/FitnessProgram/data/legacy_sheets_comments_hope.txt"
+  parsed_comments: "/Users/ljw/Projects/FitnessProgram/data/parsed_comments_hope.csv"
+  sheet_id: 1SHlHUeLgN4kvV6aFQJ_F1lIzvNPtLEoriatF-0kY6f0
+  pretty: Fit Bitch
+
+test:
+  legacy_comments: null
+  parsed_comments: null
+  sheet_id: 1-YrK_9Mc1HkBWsxNUjgw_q4hvkFG3cLCQjGezTCK1ps
+  pretty: Testing
