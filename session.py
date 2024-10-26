@@ -153,22 +153,19 @@ class Session:
             )
         )
     
+    #! To do:
+        #! Get the muscle groups within the session
+        #! Summarise the session in relation to max lifts etc.
+    
     def get_muscle_groups(self):
-        # Get exercise sheet
+        #
+        #  Get exercise sheet
 
         # Join exercises logged to exercises sheet to get muscle groups
 
-
-
-
-
-
-
-
-
-
-
-
+        return
+    
+    def summarise_session(self):
         return
 
     @property
@@ -210,52 +207,3 @@ class Session:
     @is_injured.setter
     def is_injured(self, inj_flags:bool):
         self._is_injured = inj_flags
-
-    def merge_cells(self, g_sheet, sheet_id):
-        # If the day contains session data
-        if self.is_valid:
-            body = {
-                "requests": [
-                    {
-                        "mergeCells": {
-                            "mergeType": "MERGE_ALL",
-                            "range": {  
-                                "sheetId": sheet_id,
-                                "startRowIndex": self.empty_exercise_range["start"][0],
-                                "endRowIndex": self.empty_exercise_range["end"][0],
-                                "startColumnIndex": self.empty_exercise_range["start"][1],
-                                "endColumnIndex": self.empty_exercise_range["end"][1]
-                            }
-                        }
-                    }
-                ]
-            }
-        # Otherwise just one cell should contain "REST", "ILL" etc.
-        else:
-            top_exercise_row = self.session_anchor[0]+1
-            bot_exercise_row = self.session_anchor[0]+1 + \
-                self.session_length -1
-            top_exercise_col = self.session_anchor[1]
-            bot_exercise_col = self.session_anchor[1] + 1
-
-            body = {
-                "requests": [
-                    {
-                        "mergeCells": {
-                            "mergeType": "MERGE_ALL",
-                            "range": {  
-                                "sheetId": sheet_id,
-                                "startRowIndex": top_exercise_row,
-                                "endRowIndex": bot_exercise_row,
-                                "startColumnIndex": top_exercise_col,
-                                "endColumnIndex": bot_exercise_col
-                            }
-                        }
-                    }
-                ]
-            }
-
-        print(f"MERGING:\n{body}")
-
-        res = g_sheet.batch_update(body)
-        return(res)

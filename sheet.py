@@ -1,13 +1,16 @@
 from oauth2client.service_account import ServiceAccountCredentials
+from googleapiclient.discovery import build
 
 from gspread_dataframe import set_with_dataframe
 from datetime import datetime, timedelta
 from pandas import DataFrame
 import gspread
 from datetime import date
+import calendar
 import re
 
 from month import Month
+from api_requests import GoogleSheetsAPIRequests
 
 class Sheet:
 
@@ -28,6 +31,9 @@ class Sheet:
 
         # Verify user or use existing credentials
         creds = self.verify_user()
+        # Service object to apply conditional formatting
+        self.service = build('sheets', 'v4', credentials=creds)
+
         # Authorise Google Cloud access
         self.gc = gspread.authorize(creds)
 
@@ -35,7 +41,7 @@ class Sheet:
         if duplicate:
             print(f"\n\tDuplicating program: {program_name.capitalize()}")
             sheet_id_f = self.duplicate_sheet(program_name, sheet_id)
-            print(f"\n\tNew sheet Link: https://docs.google.com/spreadsheets/d/{sheet_id_f}")
+            print(f"\tNew sheet Link: https://docs.google.com/spreadsheets/d/{sheet_id_f}", end="\n\n")
         else:
             sheet_id_f = sheet_id
 
@@ -43,6 +49,7 @@ class Sheet:
         self.g_sheet = self.gc.open_by_key(
             sheet_id_f
         )
+        self.spreadsheet_id = sheet_id_f
 
         ### --- Parse New Format Months --- ###
 
@@ -65,7 +72,12 @@ class Sheet:
         else:
             parse_sheets = sheet_names
 
-        self.month_instances = self.parse_months(parse_sheets, verbose)
+        # Initialise month-instances dictionary
+        self.month_instances = dict()
+        self.parse_months(parse_sheets, verbose)
+
+        # Initialise Google Sheets Request instance for handling more complex API requests
+        self.gsar = GoogleSheetsAPIRequests(self.g_sheet)
 
     def verify_user(self):
         """
@@ -102,7 +114,11 @@ class Sheet:
             resize=True
         )
 
-    def parse_months(self, parse_sheets:tuple[str], verbose:bool):
+    def parse_months(
+        self, 
+        parse_sheets:tuple[str], 
+        verbose:bool=False
+    ):
         """
         Parse months that are using the new format where exercise notes
         are stated explicitly next to the exercise rather than in the comment
@@ -113,9 +129,8 @@ class Sheet:
             where each element of the list represents a sheet tab
         """
 
-        month_instances = {}
         for month_sheet_name in parse_sheets:
-            print(f"\tParsing Sheet: {month_sheet_name}")
+            print(f"\t\tParsing Sheet: {month_sheet_name}")
             month_data = \
                 self.g_sheet.worksheet(month_sheet_name).get_all_values()
 
@@ -125,9 +140,16 @@ class Sheet:
                 sheet_name=month_sheet_name,
                 verbose=verbose
             )
-            month_instances[month_sheet_name] = month_instance
-            
-        return(month_instances)
+            # month  instances haven't been added to yet
+            if self.month_instances == {}:
+                # month_instances needs properly initialising
+                self.month_instances = {
+                    month_sheet_name: month_instance
+                }
+            else:
+                self.month_instances[month_sheet_name] = month_instance
+
+        return
     
     def duplicate_sheet(self, program_name:str, sheet_id:str):
         new_spreadsheet = self.gc.copy(
@@ -139,50 +161,10 @@ class Sheet:
 
         return(new_spreadsheet.id)
     
-    def add_new_month(self, all_months, clean=True):
+    def add_new_month(self, new_month:datetime, clean=True):
+        print(f"\n\tAdding New Month: {new_month.strftime('%b %y')}")
         all_sheets = [s.title for s in self.g_sheet.worksheets()]
-
-
-
-
-
-        # Always be one month ahead, so check if an empty month doesn't exist
-        # not any([]) returns True to add the first month
-
-        # current_month = []
-        # if not any([month_inst.total_sessions == 0 \
-        #             for month_inst in all_months
-        #     ]) #! Latest month doesn't exist:
-
-
-
-
-
-
-
-
-
-        explicit_format_month_sheets = [
-            datetime.strptime(s, '%b %y') for s in all_sheets \
-                if re.search(" \d{2}", s) is not None
-        ]
-        # If no new format months add the current month
-        if explicit_format_month_sheets == []:
-            new_month = datetime.now()
-        else:
-            # Add 5 weeks to guarentee we're in the next month and then take month, year
-            new_month = max(explicit_format_month_sheets).replace(day=1) + timedelta(weeks=5)
-
-
-
-
-
-
-
-
-
-        new_month = datetime.now()
-        print(new_month.strftime("%b %y"))
+        
         new_month_meta = {
             "sheet_name": new_month.strftime("%b %y"),
             "month_datetime": new_month,
@@ -197,7 +179,6 @@ class Sheet:
 
         # Initialise duplicated sheet
         new_ws = self.g_sheet.worksheet(new_month_meta["sheet_name"])
-        print("New ws initialised")
         # Find what day the start of the month is and update day 1 accordingly
         # other Month days will follow through
         first_day = new_month.replace(day=1).weekday()
@@ -220,109 +201,105 @@ class Sheet:
         # Give the template weeknumbers
         new_ws.update("A5", int(new_month.replace(day=1).strftime("%V")))
 
+        # Add it to the month_instances dictionary to get month_instances variables
+        self.parse_months([new_month_meta["sheet_name"]])
+
         if clean:
             # Clean sheet
-            self.clean_new_month(new_ws, new_month_meta)
+            self.clean_new_month(sheet_name=new_month_meta["sheet_name"])
 
         return
+
+    @staticmethod
+    def get_week_number(date:datetime):
+        # Get the first day of the month
+        first_day = date.replace(day=1)
+        # Find the first Sunday of the month
+        first_sunday = first_day + timedelta(days=(6 - first_day.weekday()) % 7)
+        # Calculate the difference in days between the first Sunday and the given date
+        days_difference = (date - first_sunday).days
+        # Calculate the week number
+        week_number = days_difference // 7 + 1 if days_difference >= 0 else 1
+        return week_number
     
-    def clean_new_month(self, ws:gspread.worksheet.Worksheet, new_month_meta:dict):
-        print(f"Running clean_new_month for {new_month_meta['sheet_name']}")
+    def clean_new_month(self, sheet_name:str):
+        month_inst = self.month_instances[sheet_name]
 
         ### ---  Remove unnecessary pre days --- ###
 
-        # Get raw values for the empty new sheet so the sessions can pull cell locations
-        new_month_data = self.g_sheet.worksheet(
-            new_month_meta['sheet_name']
-        ).get_all_values()
+        # Use the location of first day and length of sessions to merge first week cells
+        session_length = month_inst.session_length
 
-        new_month_instance = Month(
-            data=new_month_data,
-            g_sheet=self.g_sheet,
-            sheet_name=new_month_meta['sheet_name'],
-            verbose=True
+        first_session_col = 1
+        first_session_row = 3 # Merge the date cell too
+        final_session_row = session_length+3
+        final_session_col = month_inst.day1_column_index
+
+        self.gsar.merge_cells(
+            sheet_id=month_inst.sheet_id,
+            start_row=first_session_row,
+            end_row=final_session_row,
+            start_col=first_session_col,
+            end_col=final_session_col,
+            colour={"red":1, "green":0.976, "blue":0.905},
+            remove_data_validation=False,
+            new_value=" ",
+            sheet_name=sheet_name,
+            colour_borders=True
         )
-
-        
-
-        for s in new_month_instance.month_sessions:
-            print(s.print_session_info())
-        # print(month_instance.month_values)
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-#         # Mapping of weekday to right-most session column index
-#         pinch_punch_mapping = {
-#             6: 2,  # "Sun"
-#             0: 4,  # "Mon"
-#             1: 6,  # "Tue"
-#             2: 8,  # "Wed"
-#             3: 10, # "Thur"
-#             4: 12, # "Fri"
-#             5: 14  # "Sat"
-#         }
-
-#         # Get the column containing the first day
-#         day_1_weekday = new_month_meta["month_datetime"].replace(day=1).weekday()
-#         # Left most column so -1
-#         day_1_col_ind = pinch_punch_mapping[day_1_weekday] - 1
-
-#         session_length = Month.find_session_length(
-#             day_1_col_ind,
-#             ws.get_all_values()
-#         )
-#         print(session_length)
-#         # Lowest empty row
-#         final_ex_row = session_length+4
-
-#         # Rightmost empty column
-#         rightmost_col = pinch_punch_mapping[day_1_weekday-1] + 1
-
-#         print(f"Merging from (2,5):({rightmost_col},{final_ex_row})")
 
         ### --- Remove Unnecessary Post Days --- ###
 
-        
-        exit()
+        ## -- Remove End of Final Week -- ##
 
-        # Merge days that don't exist
+        # Get the datetime object for the month given the sheet name
+        month_dt_obj = datetime.strptime(month_inst.sheet_name, "%b %y")
+        # Get the final day of the month
+        month_final_day = calendar.monthrange(month_dt_obj.year, month_dt_obj.month)[1]
+        # Set the date to the final day of the month for efficiency below
+        month_final_day_dt_obj = month_dt_obj.replace(day=month_final_day)
+        # Get the week number of the final day so we can find the row number it sits on
+        final_week_number = self.get_week_number(month_final_day_dt_obj)
+        fw_row_number = (final_week_number*session_length) + 4
+
+        # If final day is a Saturday, no cells to merge this month
+        if month_final_day_dt_obj.weekday() != 5:
+            final_session_col = month_inst.find_dayx(row_num=fw_row_number, day_num=month_final_day)
+            
+            self.gsar.merge_cells(
+                sheet_id=month_inst.sheet_id,
+                start_row=fw_row_number-1,
+                end_row=fw_row_number+session_length-1, # 0 indexed rows
+                start_col=final_session_col+2, # We want to merge the day after the final day
+                end_col=15, # Always going to be the right-most column
+                colour={"red":1, "green":0.976, "blue":0.905},
+                remove_data_validation=False,
+                new_value=" ",
+                sheet_name=sheet_name,
+                colour_borders=True
+            )
+
+        ## -- Remove Remaining Whole Weeks -- ##
+
+        # Set current week to be the week after the final week row number
+        current_row_number = fw_row_number + session_length - 1
+        while current_row_number < 54:
+            self.gsar.merge_cells(
+                sheet_id=month_inst.sheet_id,
+                start_row=current_row_number,
+                end_row=current_row_number+session_length,
+                start_col=1,
+                end_col=15, # Always going to be the right-most column
+                colour={"red":1, "green":0.976, "blue":0.905},
+                remove_data_validation=False,
+                new_value=" ",
+                sheet_name=sheet_name,
+                colour_borders=True
+            )
+            current_row_number += session_length + 1
+
         return
-
     
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
     def clean_sessions(self):
         # For each month
             # For each session earlier than today
@@ -337,6 +314,13 @@ class Sheet:
                     # Clear dropdown
                     # Colour cell
                     # Merge to the last exercise
+                    # Add session title
+
+        # top_exercise_row = self.session_anchor[0]+1
+        # bot_exercise_row = self.session_anchor[0]+1 + \
+        #     self.session_length -1
+        # top_exercise_col = self.session_anchor[1]
+        # bot_exercise_col = self.session_anchor[1] + 1
 
         for month_name, month_inst in self.month_instances.items():
             print(month_name, month_inst)

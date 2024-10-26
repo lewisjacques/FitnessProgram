@@ -1,5 +1,7 @@
 from comment import RawCommentFile
 
+from dateutil.relativedelta import relativedelta
+from datetime import datetime
 from sheet import Sheet
 import pandas as pd
 import numpy as np
@@ -60,44 +62,49 @@ class Program:
         ### --- Get / Generate Archived Comments --- ###
 
         # Returns None if no data provided
-        legacy_exercise_df = self.get_archived_comments(
-            parsed_comment_location,
-            legacy_comment_location,
-            reparse_legacy
-        )
+        # legacy_exercise_df = self.get_archived_comments(
+        #     parsed_comment_location,
+        #     legacy_comment_location,
+        #     reparse_legacy
+        # )
 
-        # ### --- Combine Legacy and New Format Month Data --- ###
+        # # ### --- Combine Legacy and New Format Month Data --- ###
 
-        all_exercise_df = self.concatenate_all_months(
-            legacy_exercise_df,
-            self.sheet.month_instances
-        )
+        # all_exercise_df = self.concatenate_all_months(
+        #     legacy_exercise_df,
+        #     self.sheet.month_instances
+        # )
 
-        # ### --- Enrich Logged Results --- ###
+        # # ### --- Enrich Logged Results --- ###
 
-        enriched_logs_df = self.enrich_logs(all_exercise_df)
+        # enriched_logs_df = self.enrich_logs(all_exercise_df)
 
-        # Write newly parsed comments to the sheet
-        self.sheet.write_to_sheet(
-            df=enriched_logs_df,
-            tab_name="Logs (via Python)"
-        )
+        # # Write newly parsed comments to the sheet
+        # self.sheet.write_to_sheet(
+        #     df=enriched_logs_df,
+        #     tab_name="Logs (via Python)"
+        # )
 
-        ### --- Duplicate Month Template Sheet --- ###
+        ### --- Add Missing Months --- ###
 
-        print(f"\tAdding new month as the latest has updates")
-        all_months = self.sheet.month_instances.values()
+        all_months = [m.sheet_name for m in self.sheet.month_instances.values()]
 
-        # Add new month (if necessary) and clean the formatting with clean_new_month()
-        self.sheet.add_new_month(all_months, clean=False)
+        current_month_dt = datetime.now()
+        current_month_str = current_month_dt.strftime("%b %y")
+        next_month_dt = datetime.now() + relativedelta(months=1)
+        next_month_str = next_month_dt.strftime("%b %y")
 
+        clean_month = True
 
+        # Always be one month ahead
+        if current_month_str not in all_months:
+            # Add new month (if necessary) and clean the formatting with clean_new_month()
+            self.sheet.add_new_month(current_month_dt, clean=clean_month)
+        if next_month_str not in  all_months:
+            # Add new month (if necessary) and clean the formatting with clean_new_month()
+            self.sheet.add_new_month(next_month_dt, clean=clean_month)
 
-
-
-
-
-
+        ### --- Clean Month Sheets By Merging Unused Cells --- ###
 
         # Clean the months by merging unused cells and prettifying the program
         # self.sheet.clean_sessions()

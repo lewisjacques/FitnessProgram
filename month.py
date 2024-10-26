@@ -20,48 +20,55 @@ class Month:
         """
 
         self.month_values = data
+        self.sheet_name = sheet_name
         self.sheet_id = g_sheet.worksheet(sheet_name)._properties['sheetId']
 
         # Initialise g_sheet as a class variable
         self.g_sheet= g_sheet
 
         # Find where day 1 starts in this given month
-        day1_column_index = self.find_day1()
+        self.day1_column_index = self.find_dayx(day_num=1, row_num=4)
         # Get month header in the sheet
         self.month = self.get_month()
 
         # Find the session length for day 1, assume same session length throughout month
-        self.session_length = Month.find_session_length(day1_column_index, self.month_values)
-        self.month_sessions:Session = self.build_sessions(day1_column_index)
+        self.session_length = Month.find_session_length(
+            self.day1_column_index, 
+            self.month_values
+        )
+        self.month_sessions = self.build_sessions(
+            self.day1_column_index
+        )
 
         self.get_month_meta_data(verbose)
 
-    def find_day1(self):
+    def find_dayx(self, day_num:int=1, row_num:int=4):
         """
         Iterate through row 4 to find day 1 so we can subsequently find day 8
         to get hold of the session length
 
         Raises:
-            Exception: If day 1 not identified
+            Exception: If day x not identified
         """
         # Searching 
         skip_col_a = True
-        day_1_column_index = None
-        for col_ind, col_val in enumerate(self.month_values[3]):
+        day_x_column_index = None
+        # row_num 0 index
+        for col_ind, col_val in enumerate(self.month_values[row_num-1]):
             # Skip column A to avoid week numbers
             if skip_col_a:
                 skip_col_a = False
                 continue
 
             # When the first day of the month is found "1" or "1 - ___"
-            if re.search("1( - )?", col_val) is not None:
-                day_1_column_index = col_ind
+            if re.search(f"{day_num}( - )?", col_val) is not None:
+                day_x_column_index = col_ind
         
-        if day_1_column_index is None:
+        if day_x_column_index is None:
             # Convert to custom exception class in future
-            raise Exception("Day 1 Column not identified")
+            raise Exception(f"Day {day_num} Column not identified")
         
-        return(day_1_column_index)
+        return(day_x_column_index)
     
     def get_month(self):
         """
@@ -189,7 +196,7 @@ class Month:
 
 
 
-
+            #! Work from here for theh  merging of unused cells in a session
             # print(session_vals["meta"]["empty_exercise_range"])
 
         return(session_vals)

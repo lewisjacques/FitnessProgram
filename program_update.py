@@ -18,7 +18,7 @@ if __name__ == "__main__":
         help="reparse a new copy of the legacy Google Sheet comments"
     )
     parser.add_argument(
-        '--verbose', action=argparse.BooleanOptionalAction,
+        '--verbose', action=argparse.BooleanOptionalAction, default=False,
         help="Print out additional meta information about the program"
     )
     parser.add_argument(
@@ -37,6 +37,10 @@ if __name__ == "__main__":
         f'Program name should be one of {known_programs}'
 
     ### --- Make Updates to the Program Sheet --- ###
+
+    # Short Term:
+        # - Finish clean_new_month run from add_new_month in sheet.py
+        # - Write clean_sessions run from program.py
     
     # Initialise an instance of Program which;
 
@@ -65,6 +69,8 @@ if __name__ == "__main__":
     #   - Handle program meta data:
     #       - Get values for sessions, exercises etc
     #!      - Write to home sheet
+    #!  - Store Template sheets in a seperate document with specified colours 
+    #!      and session numbers
 
     if args.program == "all":
         for p in known_programs:
