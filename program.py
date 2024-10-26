@@ -62,28 +62,28 @@ class Program:
         ### --- Get / Generate Archived Comments --- ###
 
         # Returns None if no data provided
-        # legacy_exercise_df = self.get_archived_comments(
-        #     parsed_comment_location,
-        #     legacy_comment_location,
-        #     reparse_legacy
-        # )
+        legacy_exercise_df = self.get_archived_comments(
+            parsed_comment_location,
+            legacy_comment_location,
+            reparse_legacy
+        )
 
-        # # ### --- Combine Legacy and New Format Month Data --- ###
+        ### --- Combine Legacy and New Format Month Data --- ###
 
-        # all_exercise_df = self.concatenate_all_months(
-        #     legacy_exercise_df,
-        #     self.sheet.month_instances
-        # )
+        all_exercise_df = self.concatenate_all_months(
+            legacy_exercise_df,
+            self.sheet.month_instances
+        )
 
-        # # ### --- Enrich Logged Results --- ###
+        ### --- Enrich Logged Results --- ###
 
-        # enriched_logs_df = self.enrich_logs(all_exercise_df)
+        enriched_logs_df = self.enrich_logs(all_exercise_df)
 
-        # # Write newly parsed comments to the sheet
-        # self.sheet.write_to_sheet(
-        #     df=enriched_logs_df,
-        #     tab_name="Logs (via Python)"
-        # )
+        # Write newly parsed comments to the sheet
+        self.sheet.write_to_sheet(
+            df=enriched_logs_df,
+            tab_name="Logs (via Python)"
+        )
 
         ### --- Add Missing Months --- ###
 
