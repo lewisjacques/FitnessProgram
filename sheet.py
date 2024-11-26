@@ -1,55 +1,34 @@
-from oauth2client.service_account import ServiceAccountCredentials
-from googleapiclient.discovery import build
-
 from gspread_dataframe import set_with_dataframe
 from datetime import datetime, timedelta
 from pandas import DataFrame
-import gspread
-from datetime import date
+
 import calendar
 import re
 
 from month import Month
-from api_requests import GoogleSheetsAPIRequests
+from program_base import ProgramBase
 
-class Sheet:
 
-    SCOPES = [
-        'https://www.googleapis.com/auth/spreadsheets',
-        'https://www.googleapis.com/auth/drive'
-    ]
-    CREDENTIALS_PATH = 'credentials/sa_program_update.json'
-
+class Sheet(ProgramBase):
     def __init__(
         self, 
         program_name:str, 
-        sheet_id:str, 
+        spreadsheet_id:str, 
         duplicate:bool, 
         verbose:bool,
-        sheet_names:list[str]
+        sheet_names:list[str],
+        clean_parsed_months:bool
         ):
 
-        # Verify user or use existing credentials
-        creds = self.verify_user()
-        # Service object to apply conditional formatting
-        self.service = build('sheets', 'v4', credentials=creds)
-
-        # Authorise Google Cloud access
-        self.gc = gspread.authorize(creds)
+        super().__init__(spreadsheet_id)
 
         # If run as a duplicate run updates on a copy of the sheet for testing
         if duplicate:
             print(f"\n\tDuplicating program: {program_name.capitalize()}")
-            sheet_id_f = self.duplicate_sheet(program_name, sheet_id)
-            print(f"\tNew sheet Link: https://docs.google.com/spreadsheets/d/{sheet_id_f}", end="\n\n")
-        else:
-            sheet_id_f = sheet_id
-
-        # Open training program
-        self.g_sheet = self.gc.open_by_key(
-            sheet_id_f
-        )
-        self.spreadsheet_id = sheet_id_f
+            spreadsheet_id = self.duplicate_sheet(program_name, spreadsheet_id)
+            print(f"\tNew sheet Link: https://docs.google.com/spreadsheets/d/{spreadsheet_id}", end="\n\n")
+            # Reinitialise ProgramBase for the duplicated sheet
+            super().__init__(spreadsheet_id)
 
         ### --- Parse New Format Months --- ###
 
@@ -72,27 +51,12 @@ class Sheet:
         else:
             parse_sheets = sheet_names
 
+        # Retrieve all merge ranges for all sheets
+        self.merged_ranges = self.retrieve_all_merge_ranges()
+
         # Initialise month-instances dictionary
         self.month_instances = dict()
-        self.parse_months(parse_sheets, verbose)
-
-        # Initialise Google Sheets Request instance for handling more complex API requests
-        self.gsar = GoogleSheetsAPIRequests(self.g_sheet)
-
-    def verify_user(self):
-        """
-        Return the credentials object derived from the service account
-        credentials file
-
-        Returns:
-            ServiceAccountCredentials: Google Sheets API credentials
-        """
-
-        creds = ServiceAccountCredentials.from_json_keyfile_name(
-            self.CREDENTIALS_PATH,
-            self.SCOPES
-        )
-        return creds
+        self.parse_months(parse_sheets, clean_parsed_months, verbose)
     
     def write_to_sheet(self, df:DataFrame, tab_name:str):
         """
@@ -117,6 +81,7 @@ class Sheet:
     def parse_months(
         self, 
         parse_sheets:tuple[str], 
+        clean_parsed_months:bool,
         verbose:bool=False
     ):
         """
@@ -131,16 +96,25 @@ class Sheet:
 
         for month_sheet_name in parse_sheets:
             print(f"\t\tParsing Sheet: {month_sheet_name}")
-            month_data = \
-                self.g_sheet.worksheet(month_sheet_name).get_all_values()
+            # Get raw month data
+            month_data = self.g_sheet.worksheet(month_sheet_name).get_all_values()
+            # Get merged ranges for this sheet
+            month_merged_ranges = self.merged_ranges[month_sheet_name]
 
             month_instance = Month(
                 data=month_data,
-                g_sheet=self.g_sheet,
+                spreadsheet_id=self.spreadsheet_id,
                 sheet_name=month_sheet_name,
-                verbose=verbose
+                merged_ranges=month_merged_ranges
             )
-            # month  instances haven't been added to yet
+
+            ### --- Clean Month Sheets By Merging Unused Cells --- ###
+
+            if clean_parsed_months:
+                # Clean the months by merging unused cells and prettifying the program
+                month_instance.clean_sessions()
+
+            # month instances haven't been added to yet
             if self.month_instances == {}:
                 # month_instances needs properly initialising
                 self.month_instances = {
@@ -148,18 +122,7 @@ class Sheet:
                 }
             else:
                 self.month_instances[month_sheet_name] = month_instance
-
         return
-    
-    def duplicate_sheet(self, program_name:str, sheet_id:str):
-        new_spreadsheet = self.gc.copy(
-            sheet_id, 
-            title=f"[Test] - Root Program:: {program_name.capitalize()} {date.today()}", 
-            copy_permissions=True,
-            folder_id="1rdON9vpywCPYp_a_gwxzOciYVQm1DdyR"
-        )
-
-        return(new_spreadsheet.id)
     
     def add_new_month(self, new_month:datetime, clean=True):
         print(f"\n\tAdding New Month: {new_month.strftime('%b %y')}")
@@ -232,7 +195,7 @@ class Sheet:
 
         first_session_col = 1
         first_session_row = 3 # Merge the date cell too
-        final_session_row = session_length+3
+        final_session_row = session_length + 3
         final_session_col = month_inst.day1_column_index
 
         self.gsar.merge_cells(
@@ -300,30 +263,17 @@ class Sheet:
 
         return
     
-    def clean_sessions(self):
-        # For each month
-            # For each session earlier than today
-                # If empty or REST, ILL, HOLIDAY INJURED in keys
-                    # Set first exercise to relevant off day
-                    # Merge all exercise slots
-                # Else if title is only the date (not parsed)
-                    # For each exercise
-                        # If value == "" (exercise not complete) ----- OPTIONAL becacuse might need reordering
-                            # Set exercise to ""
-                    # Get first empty session index
-                    # Clear dropdown
-                    # Colour cell
-                    # Merge to the last exercise
-                    # Add session title
+    def retrieve_all_merge_ranges(self) -> dict:
+        # Retrieve the full spreadsheet metadata
+        sheet_metadata = self.service.spreadsheets().get(
+            spreadsheetId=self.spreadsheet_id, 
+            fields='sheets'
+        ).execute()
+        sheets = sheet_metadata['sheets']
 
-        # top_exercise_row = self.session_anchor[0]+1
-        # bot_exercise_row = self.session_anchor[0]+1 + \
-        #     self.session_length -1
-        # top_exercise_col = self.session_anchor[1]
-        # bot_exercise_col = self.session_anchor[1] + 1
-
-        for month_name, month_inst in self.month_instances.items():
-            print(month_name, month_inst)
-            #! month_inst.clean_month()
-
-        return
+        # Get merged ranges for the specific sheet by name
+        merged_ranges = {
+            s['properties']['title'] : s.get('merges', []) \
+                for s in sheets
+        }
+        return(merged_ranges)

@@ -42,7 +42,7 @@ class Program:
         program_specs = self.program_specs[program_name]
         parsed_comment_location = program_specs['parsed_comments']
         legacy_comment_location = program_specs['legacy_comments']
-        sheet_id = program_specs['sheet_id']
+        spreadsheet_id = program_specs['sheet_id']
 
         # If running the testing program, duplicate by default
         if program_name == "test":
@@ -53,10 +53,11 @@ class Program:
         # Initialise sheet access, duplicate sheet if duplicate=True and parse months
         self.sheet = Sheet(
             program_name, 
-            sheet_id, 
+            spreadsheet_id, 
             duplicate, 
             verbose,
-            sheet_names
+            sheet_names,
+            clean_parsed_months=True
         )
 
         ### --- Get / Generate Archived Comments --- ###
@@ -87,31 +88,24 @@ class Program:
 
         ### --- Add Missing Months --- ###
 
-        all_months = [m.sheet_name for m in self.sheet.month_instances.values()]
+        # all_months = [m.sheet_name for m in self.sheet.month_instances.values()]
 
-        current_month_dt = datetime.now()
-        current_month_str = current_month_dt.strftime("%b %y")
-        next_month_dt = datetime.now() + relativedelta(months=1)
-        next_month_str = next_month_dt.strftime("%b %y")
+        # current_month_dt = datetime.now()
+        # current_month_str = current_month_dt.strftime("%b %y")
+        # next_month_dt = datetime.now() + relativedelta(months=1)
+        # next_month_str = next_month_dt.strftime("%b %y")
 
-        clean_month = True
-
-        # Always be one month ahead
-        if current_month_str not in all_months:
-            # Add new month (if necessary) and clean the formatting with clean_new_month()
-            self.sheet.add_new_month(current_month_dt, clean=clean_month)
-        if next_month_str not in  all_months:
-            # Add new month (if necessary) and clean the formatting with clean_new_month()
-            self.sheet.add_new_month(next_month_dt, clean=clean_month)
-
-        ### --- Clean Month Sheets By Merging Unused Cells --- ###
-
-        # Clean the months by merging unused cells and prettifying the program
-        # self.sheet.clean_sessions()
+        # # Always be one month ahead
+        # if current_month_str not in all_months:
+        #     # Add new month (if necessary) and clean the formatting with clean_new_month()
+        #     self.sheet.add_new_month(current_month_dt, clean=clean_month)
+        # if next_month_str not in  all_months:
+        #     # Add new month (if necessary) and clean the formatting with clean_new_month()
+        #     self.sheet.add_new_month(next_month_dt, clean=True)
 
         ### --- Program Meta --- ###
 
-        # self.get_program_meta(self.sheet.month_instances, verbose)
+        #! self.get_program_meta(self.sheet.month_instances, verbose)
 
         print("\tComplete\n")
 
@@ -189,7 +183,7 @@ class Program:
         for month_instance in month_instances.values():
             for session in month_instance.month_sessions:
                 # Not empty and not a rest day
-                if session.is_valid:
+                if session.status["is_valid"]:
                     for ex, result in session.exercises.items():
                         # Skipped exercise block
                         if ex == "" or ex == "meta":
