@@ -1,7 +1,6 @@
 from gspread_dataframe import set_with_dataframe
 from datetime import datetime, timedelta
 from pandas import DataFrame
-
 import calendar
 import re
 
@@ -20,6 +19,7 @@ class Sheet(ProgramBase):
         clean_parsed_months:bool
         ):
 
+        # Initialise ProgramBase
         super().__init__(spreadsheet_id)
 
         # If run as a duplicate run updates on a copy of the sheet for testing
@@ -198,7 +198,7 @@ class Sheet(ProgramBase):
         final_session_row = session_length + 3
         final_session_col = month_inst.day1_column_index
 
-        self.gsar.merge_cells(
+        self.merge_cells(
             sheet_id=month_inst.sheet_id,
             start_row=first_session_row,
             end_row=final_session_row,
@@ -229,7 +229,7 @@ class Sheet(ProgramBase):
         if month_final_day_dt_obj.weekday() != 5:
             final_session_col = month_inst.find_dayx(row_num=fw_row_number, day_num=month_final_day)
             
-            self.gsar.merge_cells(
+            self.merge_cells(
                 sheet_id=month_inst.sheet_id,
                 start_row=fw_row_number-1,
                 end_row=fw_row_number+session_length-1, # 0 indexed rows
@@ -247,7 +247,7 @@ class Sheet(ProgramBase):
         # Set current week to be the week after the final week row number
         current_row_number = fw_row_number + session_length - 1
         while current_row_number < 54:
-            self.gsar.merge_cells(
+            self.merge_cells(
                 sheet_id=month_inst.sheet_id,
                 start_row=current_row_number,
                 end_row=current_row_number+session_length,

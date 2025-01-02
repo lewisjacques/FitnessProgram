@@ -1,8 +1,8 @@
-import datetime
+from copy import copy
 import re
 
 class Session:
-    MUSCLE_GROUPS = [
+    MUSCLE_GROUPS = (
         "BACK",
         "LEGS",
         "BICEPS",
@@ -10,7 +10,17 @@ class Session:
         "CHEST",
         "SHOULDERS",
         "CARDIO"
-    ]
+    )
+    # If arbitrary status added, append them here
+    NON_PRIMARY_STATUSES = ("is_empty")
+    BASE_STATUS = {
+        "is_none": False,
+        "is_rest": False,
+        "is_ill": False,
+        "is_holiday": False,
+        "is_injured": False,
+        "is_valid": False
+    }
 
     def __init__(
         self, 
@@ -29,11 +39,13 @@ class Session:
             month (str): Formatted Month given at the top of the month sheet
         """
 
-        self.session_data = self.check_session_data()
+        # Set the session status defaults
+        self.status = copy(self.BASE_STATUS)
+
+        self.session_data = self.check_session_data(session_data)
         if self.session_data is None:
+            # If an empty session no need to run further functions
             return
-        
-        self.status = self.log_session_status()
         
         # Meta information
         self.empty_exercise_range = session_data["meta"]["empty_exercise_range"]
@@ -54,19 +66,24 @@ class Session:
             print(f"Error with title: {self.title}")
             self.print_session_info()
             raise(IndexError)
+
         # 0 padding day
         if len(day) == 1:
             day = f"0{day}"
         self.date_str = f"{month}-{day}"
         self.day = day
 
+        # Update status attributes with the now valid session data
+        self.update_session_status()
+
         #! self.muscle_groups = self.get_muscle_groups(self.title)
         #! self.summarise_session()
 
     def check_session_data(self, session_data:dict):
         # If no session found, set default variables
-        if self.session_data is None:
-            self.status
+        if session_data is None:
+            # Once this is reached whilst building sessions, we've reached the end of the month
+            self.status["is_none"] = True
             return(None)
         else:
             return(session_data)
@@ -80,62 +97,49 @@ class Session:
             \tIncomplete Exercises :: {self.incomplete_ex}
         """)
 
-    def log_session_status(self):
-        # If arbitrary status added, append them here
-        non_primary_statuses = ()
-        status = {
-            "is_none": False,
-            "is_rest": False,
-            "is_ill": False,
-            "is_holiday": False,
-            "is_injured": False,
-            "is_valid": False
-        }
-
+    def update_session_status(self):
         # Capture empty session
         if all([k.strip()=="" for i,k in enumerate(self.session_data.keys()) \
             if (i != 0) and (k != "meta")]):
             
-            status["is_empty"] = True
+            self.status["is_empty"] = True
         # Capture rest sessions
         if "rest" in [k.lower() for k in self.session_data.keys()]:
-            status["is_rest"] = True
+            self.status["is_rest"] = True
 
         # Capture ill sessions
         if "ill" in [k.lower() for k in self.session_data.keys()]:
-            status["is_ill"] = True
+            self.status["is_ill"] = True
 
         # Capture holiday sessions
         if "holiday" in [k.lower() for k in self.session_data.keys()]:
-            status["is_holiday"] = True
+            self.status["is_holiday"] = True
 
         # Capture injured sessions
         if "injured" in [k.lower() for k in self.session_data.keys()]:
-            status["is_injured"] = True
+            self.status["is_injured"] = True
 
         # Extract session validity
         if not(
-            status["is_rest"] or \
-            status["is_ill"] or \
-            status["is_holiday"] or \
-            status["is_injured"]
+            self.status["is_rest"] or \
+            self.status["is_ill"] or \
+            self.status["is_holiday"] or \
+            self.status["is_injured"]
         ):
-            status["is_valid"] = True
+            self.status["is_valid"] = True
 
-        ps = {s:v for s,v in status.items() if s not in non_primary_statuses}
+        ps = {s:v for s,v in self.status.items() if s not in self.NON_PRIMARY_STATUSES}
         # Check only one primary status is true, else raise a warning
         try:
-            assert sum([v for k,v in status.items() \
+            assert sum([v for k,v in self.status.items() \
                 if v and k in ps
             ]) == 1, f"""A session should have exactly one primary status. 
-            {self.date}\n\t\t{ps}\n\nSession Values: {self.session_data}
+            {self.date_str}\n\t\t{ps}\n\nSession Values: {self.session_data}
             """
         except TypeError:
             raise TypeError(f"""Type error for session:
-            {self.date}\n\t\t{ps}\n\nStatus: {status}
+            {self.date_str}\n\t\t{ps}\n\nStatus: {self.status}
             """)
-
-        return(status)
 
     def log_exercises(self):
         exercises = {}

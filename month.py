@@ -1,7 +1,5 @@
-from gspread.client import Spreadsheet
 from program_base import ProgramBase
 
-from api_requests import GoogleSheetsAPIRequests
 from session  import Session
 from datetime import datetime
 import re
@@ -21,12 +19,12 @@ class Month(ProgramBase):
             month_values (list): List of lists for all values on a given sheet
                 (this method prevents having to pass a gspread instance between classes)
         """
+        # Initialise ProgramBase variables and credentials (actually pulls already initialised class)
+        super().__init__(spreadsheet_id)
 
         self.month_values = data
         self.sheet_name = sheet_name
 
-        # Initialise ProgramBase variables and credentials
-        super().__init__(spreadsheet_id)
         # Find the tab-specific sheet ID using ProgramBase.find_sheet_id
         self.sheet_id = self.find_sheet_id(sheet_name)
         
@@ -116,6 +114,64 @@ class Month(ProgramBase):
         # Convert to custom exception class in future
         raise Exception("Date headers invalid for matching")
     
+
+    def row_iterate(self, row_number:int, column_index_init:int=0):
+        """        
+        Iterate through the row in the program creating Session objects at every other
+        column to account for both the exercise name and the corresponding comment to the
+        right
+
+        Args:
+            row_number (int)
+            column_index_init (int, optional): Initialising column index. Defaults to 1.
+        """
+        
+        # Get the first session
+        col_val = column_index_init
+        starting_coords = (row_number,col_val)
+
+        # s_data keys:
+        #   "Session Title",
+        #   "meta",
+        # }
+        s_data = self.get_session_values(session_anchor=starting_coords)
+        session = Session(
+            session_data=s_data,
+            session_length=self.session_length,
+            month=self.month
+        )
+
+        # If no session at first position the row is empty. 
+        # # (Not is_valid as a REST would not be valid)
+        if session.status["is_none"]:
+            return(None)
+        else:
+            row_sessions = [session]
+
+        column_increment = 1
+        # While there are still days in the week or we reach Saturday
+        while col_val < 13:
+            col_val = column_index_init+(column_increment*2)
+            # Top left column of the session
+            session_anchor = (row_number, col_val)
+            s_data = self.get_session_values(session_anchor=session_anchor)
+
+            # If we reach an invalid session
+            if s_data is None:
+                # Assume we're at the end of valid sessions for the week
+                break
+            
+            session = Session(
+                session_data=s_data,
+                session_length=self.session_length,
+                month=self.month
+            )
+            column_increment+=1
+            if not session.status["is_none"]:
+                row_sessions.append(session)
+
+        return(row_sessions)
+    
     def build_sessions(self, day_1_column_index:int):
         """
         Starting from Day 1, slice the list of lists so each Session can be stored
@@ -124,10 +180,12 @@ class Month(ProgramBase):
         Args:
             day_1_column_index (int): Index containing day 1 for the first row
         """
+
+        print("\t\t\tBuilding Sessions!")
+
         all_sessions = []
         # Every row that contains a date
-        for row_index in range(3,(9+(5*self.session_length)),self.session_length):
-            print(row_index)
+        for row_index in range(3,(9+(5*self.session_length)), self.session_length):
             # First row starts depending on where Sunday falls
             if row_index == 3:
                 column_start_index = day_1_column_index
@@ -135,16 +193,6 @@ class Month(ProgramBase):
             else:
                 column_start_index = 1
             
-
-
-
-
-            #! This is running for row,col after all sessions done
-
-
-
-
-
             # week_sessions holds a session object for every day of that week
             week_sessions = self.row_iterate(
                 row_number=row_index,
@@ -156,7 +204,6 @@ class Month(ProgramBase):
         
         return(all_sessions)
 
-    #! This function is more of a get_empty_cells() atm
     def get_session_values(self, session_anchor:tuple) -> dict:
         """
         Get slice of the given month for a requested session anchor (top
@@ -227,63 +274,6 @@ class Month(ProgramBase):
             )
 
         return(session_vals)
-
-    def row_iterate(self, row_number:int, column_index_init:int=0):
-        """        
-        Iterate through the row in the program creating Session objects at every other
-        column to account for both the exercise name and the corresponding comment to the
-        right
-
-        Args:
-            row_number (int)
-            column_index_init (int, optional): Initialising column index. Defaults to 1.
-        """
-        
-        # Get the first session
-        col_val = column_index_init
-        starting_coords = (row_number,col_val)
-
-        # s_data keys:
-        #   "Session Title",
-        #   "meta",
-        # }
-        s_data = self.get_session_values(session_anchor=starting_coords)
-        session = Session(
-            session_data=s_data,
-            session_length=self.session_length,
-            month=self.month
-        )
-
-        # If no session at first position the row is empty. 
-        # # (Not is_valid as a REST would not be valid)
-        if session.status["is_none"]:
-            return(None)
-        else:
-            row_sessions = [session]
-
-        column_increment = 1
-        # While there are still days in the week or we reach Saturday
-        while col_val < 13:
-            col_val = column_index_init+(column_increment*2)
-            # Top left column of the session
-            session_anchor = (row_number, col_val)
-            s_data = self.get_session_values(session_anchor=session_anchor)
-
-            # If we reach an invalid session
-            if s_data is None:
-                # Assume we're at the end of valid sessions for the week
-                break
-            
-            session = Session(
-                session_data=s_data,
-                session_length=self.session_length,
-                month=self.month
-            )
-            column_increment+=1
-            if not session.status["is_none"]:
-                row_sessions.append(session)
-
-        return(row_sessions)
     
     def get_month_meta_data(self, verbose):
         self.total_sessions = sum([1 for s in self.month_sessions if s.status["is_valid"]])
@@ -327,6 +317,7 @@ class Month(ProgramBase):
             return True
         return False
 
+    #! Move to session.py to give an status["is_merged"] value
     def get_merge_status(self, session: Session):
         """Determine if the session has been processed based on merged cells."""
         session_start_row = session.session_anchor[0]
@@ -362,11 +353,11 @@ class Month(ProgramBase):
                 Merge to the last exercise
                 Add session title
         """
-        print(self.month_sessions[0:3])
-        print(self.month_sessions[-3:])
+        print("\t\t\tCleaning Sessions!")
 
         for session in self.month_sessions:
-            print(f"{session.session_anchor} - {session.date_str}")
+            stat_string = ", ".join([k for k,v in session.status.items() if v])
+            print(f"\t\t\t\t{session.session_anchor} - {session.date_str} - {stat_string}")
             # Is the session empty?
             empty_session = session.status["is_none"]
             # Is the session before todays date?
@@ -393,9 +384,8 @@ class Month(ProgramBase):
             if not is_merged and historical_day and session.status["is_valid"]:
                 print(f"Not merged, is historical day and is valid. Merge empty exercises")
                 
-                self.gsar.merge_cells(
+                self.merge_cells(
                     sheet_id=self.sheet_id,
-                    #! Very roundabout way to get this variable
                     start_row=session.empty_exercise_range["start"][0],
                     end_row=session.empty_exercise_range["end"][0],
                     start_col=session.empty_exercise_range["start"][1],

@@ -205,7 +205,7 @@ class Program:
     
     def find_result(self, result):
         """
-        Get a rough estimate of the exercise result. Long term this will be an 
+        Build a programmatic estimate of the exercise result. Long term this will be an 
         NLP-like system of finding similar strings
 
         Args:
