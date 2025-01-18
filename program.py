@@ -57,51 +57,55 @@ class Program:
             duplicate, 
             verbose,
             sheet_names,
-            clean_parsed_months=True
+            clean_parsed_months=False #! Change for testing
         )
 
         ### --- Get / Generate Archived Comments --- ###
 
         # Returns None if no data provided
-        # legacy_exercise_df = self.get_archived_comments(
-        #     parsed_comment_location,
-        #     legacy_comment_location,
-        #     reparse_legacy
-        # )
+        legacy_exercise_df = self.get_archived_comments(
+            parsed_comment_location,
+            legacy_comment_location,
+            reparse_legacy
+        )
 
-        # # ### --- Combine Legacy and New Format Month Data --- ###
+        # ### --- Combine Legacy and New Format Month Data --- ###
 
-        # all_exercise_df = self.concatenate_all_months(
-        #     legacy_exercise_df,
-        #     self.sheet.month_instances
-        # )
+        all_exercise_df = self.concatenate_all_months(
+            legacy_exercise_df,
+            self.sheet.month_instances
+        )
 
-        # # ### --- Enrich Logged Results --- ###
+        # ### --- Enrich Logged Results --- ###
 
-        # enriched_logs_df = self.enrich_logs(all_exercise_df)
+        enriched_logs_df = self.enrich_logs(all_exercise_df)
 
-        # # Write newly parsed comments to the sheet
-        # self.sheet.write_to_sheet(
-        #     df=enriched_logs_df,
-        #     tab_name="Logs (via Python)"
-        # )
+        # Write newly parsed comments to the sheet
+        self.sheet.write_to_sheet(
+            df=enriched_logs_df,
+            tab_name="Logs (via Python)"
+        )
 
-        ### --- Add Missing Months --- ###
+        ## --- Add Missing Months --- ###
+        print(self.sheet.month_instances)
+        all_months = [m.sheet_name for m in self.sheet.month_instances.values()]
 
-        # all_months = [m.sheet_name for m in self.sheet.month_instances.values()]
+        current_month_dt = datetime.now()
+        current_month_str = current_month_dt.strftime("%b %y")
+        next_month_dt = datetime.now() + relativedelta(months=1)
+        next_month_str = next_month_dt.strftime("%b %y")
 
-        # current_month_dt = datetime.now()
-        # current_month_str = current_month_dt.strftime("%b %y")
-        # next_month_dt = datetime.now() + relativedelta(months=1)
-        # next_month_str = next_month_dt.strftime("%b %y")
-
-        # # Always be one month ahead
-        # if current_month_str not in all_months:
-        #     # Add new month (if necessary) and clean the formatting with clean_new_month()
-        #     self.sheet.add_new_month(current_month_dt, clean=clean_month)
-        # if next_month_str not in  all_months:
-        #     # Add new month (if necessary) and clean the formatting with clean_new_month()
-        #     self.sheet.add_new_month(next_month_dt, clean=True)
+        # Always be one month ahead
+        if current_month_str not in all_months:
+            print(all_months)
+            print(f"Not found {current_month_str}")
+            # Add new month (if necessary) and clean the formatting with clean_new_month()
+            self.sheet.add_new_month(current_month_dt)
+        if next_month_str not in all_months:
+            print(all_months)
+            print(f"Not found {next_month_str}")
+            # Add new month (if necessary) and clean the formatting with clean_new_month()
+            self.sheet.add_new_month(next_month_dt)
 
         ### --- Program Meta --- ###
 
@@ -172,6 +176,9 @@ class Program:
                 "Cell Data": "Exercise",
                 "Comment": "Result"
             }, inplace=True)
+
+            # Set the date to a date 
+            exercise_df["Date"] = pd.to_datetime(exercise_df["Date"], format="%Y-%m-%d")
         else:
             exercise_df = pd.DataFrame(columns=[
                 "Date",
@@ -189,17 +196,19 @@ class Program:
                         if ex == "" or ex == "meta":
                             continue
 
-                        exercise_df = pd.concat(
-                            [
-                                pd.DataFrame({
-                                    "Date": session.date,
-                                    "Exercise": ex,
-                                    "Result": result
-                                }, index=[0]),
-                                exercise_df
-                            ],
-                            ignore_index=True
-                        )
+                        new_row = pd.DataFrame({
+                            "Date": session.date,
+                            "Exercise": ex,
+                            "Result": result
+                        }, index=[0])
+
+                        # Check if exercise_df is empty or not defined
+                        if exercise_df is None or exercise_df.empty:
+                            # If empty, assign the new row directly
+                            exercise_df = new_row
+                        else:
+                            # Append the new row to the existing DataFrame
+                            exercise_df = pd.concat([new_row, exercise_df], ignore_index=True)
         
         return(exercise_df.sort_values(["Date"]))
     
@@ -262,6 +271,7 @@ class Program:
         Args:
             all_exercise_df (pd.DataFrame): Legacy and new format month logged sessions
         """
+        all_exercise_df["Date"] = all_exercise_df["Date"].dt.date
 
         # Get kg value, if no kg value find take the next largest number
         all_exercise_df["Weight"] = all_exercise_df["Result"].apply(self.find_result)

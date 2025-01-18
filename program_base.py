@@ -9,55 +9,67 @@ class ProgramBase:
         'https://www.googleapis.com/auth/drive'
     ]
     CREDENTIALS_PATH = 'credentials/sa_program_update.json'
-    _instance = None
 
-    def __new__(cls, *args, **kwargs):
-        """
-        Called before __init__ where we can 
-        check if an existing instantiation of
-        the class exists
-
-        Returns:
-            ProgramBase: cls class object
-        """
-        if cls._instance is None:
-            cls._instance = super().__new__(cls)
-        return cls._instance
+    # Shared state
+    _spreadsheet_id = None
+    _g_sheet = None
+    _initialized = False
+    _service = None
 
     def __init__(self, spreadsheet_id):
-        # Check if 'initialisation complete variable' exists
-        if not hasattr(self, "_initialized"):
-            print(f"Generating instance of Program Base! ID: {spreadsheet_id[:5]}")
-
-            # Verify user or use existing credentials
+        # Only initialize shared state once
+        
+        if not ProgramBase._initialized:
+            print(f"Current spreadsheet id: {self.spreadsheet_id}")
+            print("Initializing ProgramBase...")
             creds = self.verify_user()
+            ProgramBase._initialized = True
+            print("Initialising variables")
+            self.init_variables(spreadsheet_id, creds)
             # Service object to apply conditional formatting
-            self.service = build('sheets', 'v4', credentials=creds)
+            ProgramBase._service = build('sheets', 'v4', credentials=creds)
+        else:
+            print(f"Current spreadsheet id: {self.spreadsheet_id}")
+            print(f"New spreadsheet id: {spreadsheet_id}")
 
-            # Authorise Google Cloud access
-            self.gc = gspread.authorize(creds)
+    # Modify class level specific variables, not instance level
+    @classmethod
+    def init_variables(cls, spreadsheet_id: str, creds):
+        """
+        Initialize the shared class-level variables
+        """
+        cls._spreadsheet_id = spreadsheet_id
+        # Authorize Google Cloud access
+        gc = gspread.authorize(creds)
+        # Open training program
+        cls._g_sheet = gc.open_by_key(spreadsheet_id)
 
-            # Open training program
-            self.g_sheet = self.gc.open_by_key(spreadsheet_id)
-            self.spreadsheet_id = spreadsheet_id
+    @property
+    def spreadsheet_id(self):
+        return ProgramBase._spreadsheet_id
 
-            # Assign initialisation complete variable
-            self._initialized = True
+    @property
+    def g_sheet(self):
+        return ProgramBase._g_sheet
+    
+    @property
+    def service(self):
+        return ProgramBase._service
 
-    def duplicate_sheet(self, program_name:str, spreadsheet_id:str):
-        new_spreadsheet = self.gc.copy(
-            spreadsheet_id, 
-            title=f"[Test] - Root Program:: {program_name.capitalize()} {date.today()}", 
+    def duplicate_sheet(self, program_name: str, spreadsheet_id: str):
+        new_spreadsheet = self._g_sheet.copy(
+            spreadsheet_id,
+            title=f"[Test] - Root Program:: {program_name.capitalize()} {date.today()}",
             copy_permissions=True,
             folder_id="1rdON9vpywCPYp_a_gwxzOciYVQm1DdyR"
         )
-        return(new_spreadsheet.id)
-    
-    def find_sheet_id(self, sheet_name:str):
-        sheet_id = self.g_sheet.worksheet(
+        return new_spreadsheet.id
+
+    def find_sheet_id(self, sheet_name: str):
+        sheet_id = self._g_sheet.worksheet(
             sheet_name
         )._properties['sheetId']
-        return(sheet_id)
+        return sheet_id
 
     def verify_user(self):
         """
@@ -85,7 +97,7 @@ class ProgramBase:
         batch_update_request = {
             'requests': requests
         }
-        res = self.g_sheet.batch_update(batch_update_request)
+        res = self._g_sheet.batch_update(batch_update_request)
         return(res)
     
     @staticmethod
@@ -216,8 +228,6 @@ class ProgramBase:
         
         assert (not new_value) or (new_value and sheet_name)
 
-        print(f"\t\tMerging cells: ({start_row},{start_col}) -> ({end_row}, {end_col})")
-
         ### --- Handle Data Validation --- ###
 
         # Clear dropdowns (data validation rules) in the range to be merged
@@ -271,7 +281,7 @@ class ProgramBase:
         
         # Edit the top left cell if requested
         if new_value:
-            self.g_sheet.worksheet(
+            self._g_sheet.worksheet(
                 sheet_name
             ).update_cell(start_row+1, start_col+1, new_value)
         return(res)

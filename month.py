@@ -10,7 +10,8 @@ class Month(ProgramBase):
             data:list, 
             spreadsheet_id:str,
             sheet_name:str,
-            merged_ranges:dict
+            merged_ranges:dict,
+            pre_processed=True
         ):
         """
         Obect to store every element of a given month of training
@@ -41,11 +42,20 @@ class Month(ProgramBase):
             self.day1_column_index, 
             self.month_values
         )
-        self.month_sessions = self.build_sessions(
-            self.day1_column_index
-        )
+
+        # Expect formatted month values
+        if pre_processed:
+            self.month_sessions = self.build_sessions(
+                self.day1_column_index
+            )
+        else:
+            self.month_sessions = None
 
         #! self.get_month_meta_data()
+
+    # Set name of class so we can see cleaner output in the terminal
+    def __repr__(self):
+        return(f"#MI{self.sheet_name.replace(' ', '')}")
 
     def find_dayx(self, day_num:int=1, row_num:int=4):
         """
@@ -83,7 +93,7 @@ class Month(ProgramBase):
         try:
             month = re.findall("(\w* \d{4})", month_cell_value)[0]
         except IndexError:
-            raise Exception("No month title found, has this sheet been copied manually or edited?")
+            raise Exception(f"No month title found, has this sheet been copied manually or edited? {month_cell_value}")
         month_formatted = datetime.strptime(month, '%B %Y').strftime("%Y-%m")
         return(month_formatted)
 
@@ -181,8 +191,6 @@ class Month(ProgramBase):
             day_1_column_index (int): Index containing day 1 for the first row
         """
 
-        print("\t\t\tBuilding Sessions!")
-
         all_sessions = []
         # Every row that contains a date
         for row_index in range(3,(9+(5*self.session_length)), self.session_length):
@@ -217,11 +225,16 @@ class Month(ProgramBase):
         """
 
         session_title = self.month_values[session_anchor[0]][session_anchor[1]]
+        
         # If no session title, not a valid session
-        if session_title == "":
+        if re.sub(r"\s+", "", session_title) == "":
             return(None)
 
-        session_day = re.findall("\d{1,2}", session_title)[0]
+        try:
+            session_day = re.findall("\d{1,2}", session_title)[0]
+        except IndexError:
+            print(f"Session day not found from:.{session_title}.")
+            raise IndexError
         
         session_vals = {
             "Session Title": session_title,

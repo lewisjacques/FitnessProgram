@@ -1,6 +1,8 @@
 from gspread_dataframe import set_with_dataframe
 from datetime import datetime, timedelta
 from pandas import DataFrame
+from copy import deepcopy
+import gspread
 import calendar
 import re
 
@@ -55,8 +57,7 @@ class Sheet(ProgramBase):
         self.merged_ranges = self.retrieve_all_merge_ranges()
 
         # Initialise month-instances dictionary
-        self.month_instances = dict()
-        self.parse_months(parse_sheets, clean_parsed_months, verbose)
+        self.month_instances = self.parse_months(parse_sheets, clean_parsed_months)
     
     def write_to_sheet(self, df:DataFrame, tab_name:str):
         """
@@ -81,8 +82,7 @@ class Sheet(ProgramBase):
     def parse_months(
         self, 
         parse_sheets:tuple[str], 
-        clean_parsed_months:bool,
-        verbose:bool=False
+        clean_parsed_months:bool=True
     ):
         """
         Parse months that are using the new format where exercise notes
@@ -93,9 +93,10 @@ class Sheet(ProgramBase):
             explicit_format_months (list): List of months using the new methodology
             where each element of the list represents a sheet tab
         """
+        month_instances = dict()
 
         for month_sheet_name in parse_sheets:
-            print(f"\t\tParsing Sheet: {month_sheet_name}")
+            print(f"\tParsing Sheet: {month_sheet_name}")
             # Get raw month data
             month_data = self.g_sheet.worksheet(month_sheet_name).get_all_values()
             # Get merged ranges for this sheet
@@ -107,6 +108,7 @@ class Sheet(ProgramBase):
                 sheet_name=month_sheet_name,
                 merged_ranges=month_merged_ranges
             )
+            print(month_instance)
 
             ### --- Clean Month Sheets By Merging Unused Cells --- ###
 
@@ -114,18 +116,43 @@ class Sheet(ProgramBase):
                 # Clean the months by merging unused cells and prettifying the program
                 month_instance.clean_sessions()
 
-            # month instances haven't been added to yet
-            if self.month_instances == {}:
-                # month_instances needs properly initialising
-                self.month_instances = {
-                    month_sheet_name: month_instance
-                }
-            else:
-                self.month_instances[month_sheet_name] = month_instance
-        return
+
+
+
+
+            #! All pointing to the same month_instance
+
+
+            month_instances[month_sheet_name] = month_instance
+
+        return(month_instances)
+    
+    def process_new_month(self, new_month_ws:gspread.Worksheet, sheet_name:str) -> Month:
+        """
+        Process a new month by creating a new Month instance for it
+
+        Args:
+            sheet_name (str): Name of the sheet to process
+        """
+
+        print(f"\t\t\tProcessing New Month: {sheet_name}")
+        # Get raw month data
+        month_data = new_month_ws.get_all_values()
+        # Get merged ranges for this sheet
+
+        month_instance = Month(
+            data=month_data,
+            spreadsheet_id=self.spreadsheet_id,
+            sheet_name=sheet_name,
+            merged_ranges=None,
+            pre_processed=False
+        )
+
+        return(month_instance)
+        
     
     def add_new_month(self, new_month:datetime, clean=True):
-        print(f"\n\tAdding New Month: {new_month.strftime('%b %y')}")
+        print(f"\n\t\tAdding New Month: {new_month.strftime('%b %y')}")
         all_sheets = [s.title for s in self.g_sheet.worksheets()]
         
         new_month_meta = {
@@ -165,11 +192,13 @@ class Sheet(ProgramBase):
         new_ws.update("A5", int(new_month.replace(day=1).strftime("%V")))
 
         # Add it to the month_instances dictionary to get month_instances variables
-        self.parse_months([new_month_meta["sheet_name"]])
-
+        new_month_inst = self.process_new_month(
+            new_ws, 
+            sheet_name=new_month_meta["sheet_name"]
+        )
         if clean:
-            # Clean sheet
-            self.clean_new_month(sheet_name=new_month_meta["sheet_name"])
+            # Clean book ends of the new sheet
+            self.clean_new_month(new_month_inst)
 
         return
 
@@ -185,21 +214,21 @@ class Sheet(ProgramBase):
         week_number = days_difference // 7 + 1 if days_difference >= 0 else 1
         return week_number
     
-    def clean_new_month(self, sheet_name:str):
-        month_inst = self.month_instances[sheet_name]
+    def clean_new_month(self, new_month_instance:str):
+        print("\t\t\tCleaning new month")
 
         ### ---  Remove unnecessary pre days --- ###
 
         # Use the location of first day and length of sessions to merge first week cells
-        session_length = month_inst.session_length
+        session_length = new_month_instance.session_length
 
         first_session_col = 1
         first_session_row = 3 # Merge the date cell too
         final_session_row = session_length + 3
-        final_session_col = month_inst.day1_column_index
+        final_session_col = new_month_instance.day1_column_index
 
         self.merge_cells(
-            sheet_id=month_inst.sheet_id,
+            sheet_id=new_month_instance.sheet_id,
             start_row=first_session_row,
             end_row=final_session_row,
             start_col=first_session_col,
@@ -207,7 +236,7 @@ class Sheet(ProgramBase):
             colour={"red":1, "green":0.976, "blue":0.905},
             remove_data_validation=False,
             new_value=" ",
-            sheet_name=sheet_name,
+            sheet_name=new_month_instance.sheet_name,
             colour_borders=True
         )
 
@@ -216,7 +245,7 @@ class Sheet(ProgramBase):
         ## -- Remove End of Final Week -- ##
 
         # Get the datetime object for the month given the sheet name
-        month_dt_obj = datetime.strptime(month_inst.sheet_name, "%b %y")
+        month_dt_obj = datetime.strptime(new_month_instance.sheet_name, "%b %y")
         # Get the final day of the month
         month_final_day = calendar.monthrange(month_dt_obj.year, month_dt_obj.month)[1]
         # Set the date to the final day of the month for efficiency below
@@ -227,10 +256,10 @@ class Sheet(ProgramBase):
 
         # If final day is a Saturday, no cells to merge this month
         if month_final_day_dt_obj.weekday() != 5:
-            final_session_col = month_inst.find_dayx(row_num=fw_row_number, day_num=month_final_day)
+            final_session_col = new_month_instance.find_dayx(row_num=fw_row_number, day_num=month_final_day)
             
             self.merge_cells(
-                sheet_id=month_inst.sheet_id,
+                sheet_id=new_month_instance.sheet_id,
                 start_row=fw_row_number-1,
                 end_row=fw_row_number+session_length-1, # 0 indexed rows
                 start_col=final_session_col+2, # We want to merge the day after the final day
@@ -238,7 +267,7 @@ class Sheet(ProgramBase):
                 colour={"red":1, "green":0.976, "blue":0.905},
                 remove_data_validation=False,
                 new_value=" ",
-                sheet_name=sheet_name,
+                sheet_name=new_month_instance.sheet_name,
                 colour_borders=True
             )
 
@@ -248,7 +277,7 @@ class Sheet(ProgramBase):
         current_row_number = fw_row_number + session_length - 1
         while current_row_number < 54:
             self.merge_cells(
-                sheet_id=month_inst.sheet_id,
+                sheet_id=new_month_instance.sheet_id,
                 start_row=current_row_number,
                 end_row=current_row_number+session_length,
                 start_col=1,
@@ -256,7 +285,7 @@ class Sheet(ProgramBase):
                 colour={"red":1, "green":0.976, "blue":0.905},
                 remove_data_validation=False,
                 new_value=" ",
-                sheet_name=sheet_name,
+                sheet_name=new_month_instance.sheet_name,
                 colour_borders=True
             )
             current_row_number += session_length + 1
