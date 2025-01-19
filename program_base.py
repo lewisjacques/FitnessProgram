@@ -11,53 +11,70 @@ class ProgramBase:
     CREDENTIALS_PATH = 'credentials/sa_program_update.json'
 
     # Shared state
-    _spreadsheet_id = None
-    _g_sheet = None
+    _gc = None
     _initialized = False
     _service = None
+    _creds = None
 
     def __init__(self, spreadsheet_id):
         # Only initialize shared state once
+
+        #! This isn't working the way it should
         
         if not ProgramBase._initialized:
-            print(f"Current spreadsheet id: {self.spreadsheet_id}")
             print("Initializing ProgramBase...")
-            creds = self.verify_user()
-            ProgramBase._initialized = True
-            print("Initialising variables")
-            self.init_variables(spreadsheet_id, creds)
-            # Service object to apply conditional formatting
-            ProgramBase._service = build('sheets', 'v4', credentials=creds)
+            ProgramBase._creds = self.verify_user()
+            print("Initialising variables (class and instance)")
+            self.init_class_variables(spreadsheet_id)
+            self.init_instance_variables(spreadsheet_id)
         else:
-            print(f"Current spreadsheet id: {self.spreadsheet_id}")
             print(f"New spreadsheet id: {spreadsheet_id}")
+            print("Initialising instance variables")
+            self.init_instance_variables(spreadsheet_id)
 
     # Modify class level specific variables, not instance level
     @classmethod
-    def init_variables(cls, spreadsheet_id: str, creds):
+    def init_class_variables(cls, spreadsheet_id:str):
+        """
+        Initialize the shared class-level variables. Called on
+        ProgramBase rather than cls to avoid writing variables
+        to the subclass instance
+        """
+        ProgramBase._initialized = True
+        ProgramBase._spreadsheet_id = spreadsheet_id
+        # Service object to apply conditional formatting
+        ProgramBase._service = build('sheets', 'v4', credentials=ProgramBase._creds)
+
+    def init_instance_variables(self, spreadsheet_id:str):
         """
         Initialize the shared class-level variables
         """
-        cls._spreadsheet_id = spreadsheet_id
-        # Authorize Google Cloud access
-        gc = gspread.authorize(creds)
-        # Open training program
-        cls._g_sheet = gc.open_by_key(spreadsheet_id)
+        # Initialise google sheet instance
+        self.g_sheet = self.gc.open_by_key(spreadsheet_id)
 
     @property
     def spreadsheet_id(self):
         return ProgramBase._spreadsheet_id
-
-    @property
-    def g_sheet(self):
-        return ProgramBase._g_sheet
     
     @property
     def service(self):
         return ProgramBase._service
+    
+    @property
+    def gc(self):
+        if ProgramBase._gc is None:
+            raise ValueError("Google Sheets client (_gc) has not been initialized. Ensure init_class_variables() was called.")
+        print("Returning _gc")
+        return ProgramBase._gc
+    
+    def get_worksheets(self):
+        return(self.g_sheet.worksheets())
+    
+    def get_sheet(self, sheet_name:str):
+        return(self.g_sheet.worksheet(sheet_name))
 
     def duplicate_sheet(self, program_name: str, spreadsheet_id: str):
-        new_spreadsheet = self._g_sheet.copy(
+        new_spreadsheet = self.gc.copy(
             spreadsheet_id,
             title=f"[Test] - Root Program:: {program_name.capitalize()} {date.today()}",
             copy_permissions=True,
@@ -65,8 +82,13 @@ class ProgramBase:
         )
         return new_spreadsheet.id
 
-    def find_sheet_id(self, sheet_name: str):
-        sheet_id = self._g_sheet.worksheet(
+    def find_sheet_id(self, sheet_name:str, pre_processed:bool, spreadsheet_id:str):
+        # Not currently added to gspread instance
+        if not pre_processed:
+            # Need to update the gspread instance
+            self.init_instance_variables(spreadsheet_id)
+
+        sheet_id = self.g_sheet.worksheet(
             sheet_name
         )._properties['sheetId']
         return sheet_id
@@ -86,6 +108,21 @@ class ProgramBase:
         )
         return creds
     
+    def retrieve_all_merge_ranges(self) -> dict:
+        # Retrieve the full spreadsheet metadata
+        sheet_metadata = self._service.spreadsheets().get(
+            spreadsheetId=self._spreadsheet_id, 
+            fields='sheets'
+        ).execute()
+        sheets = sheet_metadata['sheets']
+
+        # Get merged ranges for the specific sheet by name
+        merged_ranges = {
+            s['properties']['title'] : s.get('merges', []) \
+                for s in sheets
+        }
+        return(merged_ranges)
+    
     ### --- API Requests --- ###
 
     def run_requests(
@@ -97,7 +134,7 @@ class ProgramBase:
         batch_update_request = {
             'requests': requests
         }
-        res = self._g_sheet.batch_update(batch_update_request)
+        res = self.g_sheet.batch_update(batch_update_request)
         return(res)
     
     @staticmethod
@@ -281,7 +318,7 @@ class ProgramBase:
         
         # Edit the top left cell if requested
         if new_value:
-            self._g_sheet.worksheet(
+            self.g_sheet.worksheet(
                 sheet_name
             ).update_cell(start_row+1, start_col+1, new_value)
         return(res)

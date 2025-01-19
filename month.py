@@ -27,7 +27,7 @@ class Month(ProgramBase):
         self.sheet_name = sheet_name
 
         # Find the tab-specific sheet ID using ProgramBase.find_sheet_id
-        self.sheet_id = self.find_sheet_id(sheet_name)
+        self.sheet_id = self.find_sheet_id(sheet_name, pre_processed, spreadsheet_id)
         
         # Assign merged ranges
         self.merged_ranges = merged_ranges

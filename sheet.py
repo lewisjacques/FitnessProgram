@@ -39,7 +39,7 @@ class Sheet(ProgramBase):
 
         # Get sheets with implicit name (Any month that has YY format) to be parsed
         explicit_format_months = [
-            s.title for s in self.g_sheet.worksheets() \
+            s.title for s in self.get_worksheets() \
                 if re.search(" \d{2}", str(s.title)) is not None
         ]
         
@@ -68,7 +68,7 @@ class Sheet(ProgramBase):
             tab_name (str): Worksheet to  push the data  to
         """
         # Select comment sheet
-        worksheet = self.g_sheet.worksheet(tab_name)
+        worksheet = self.get_sheet(tab_name)
         worksheet.clear()
 
         set_with_dataframe(
@@ -98,7 +98,7 @@ class Sheet(ProgramBase):
         for month_sheet_name in parse_sheets:
             print(f"\tParsing Sheet: {month_sheet_name}")
             # Get raw month data
-            month_data = self.g_sheet.worksheet(month_sheet_name).get_all_values()
+            month_data = self.get_sheet(month_sheet_name).get_all_values()
             # Get merged ranges for this sheet
             month_merged_ranges = self.merged_ranges[month_sheet_name]
 
@@ -153,7 +153,7 @@ class Sheet(ProgramBase):
     
     def add_new_month(self, new_month:datetime, clean=True):
         print(f"\n\t\tAdding New Month: {new_month.strftime('%b %y')}")
-        all_sheets = [s.title for s in self.g_sheet.worksheets()]
+        all_sheets = [s.title for s in self.get_worksheets()]
         
         new_month_meta = {
             "sheet_name": new_month.strftime("%b %y"),
@@ -161,14 +161,14 @@ class Sheet(ProgramBase):
         }
 
         # Duplicate template
-        template_ws = self.g_sheet.worksheet('TEMPLATE')
+        template_ws = self.get_sheet('TEMPLATE')
         template_ws.duplicate(
             insert_sheet_index=len(all_sheets), 
             new_sheet_name=new_month_meta["sheet_name"]
         )
 
         # Initialise duplicated sheet
-        new_ws = self.g_sheet.worksheet(new_month_meta["sheet_name"])
+        new_ws = self.get_sheet(new_month_meta["sheet_name"])
         # Find what day the start of the month is and update day 1 accordingly
         # other Month days will follow through
         first_day = new_month.replace(day=1).weekday()
@@ -291,18 +291,3 @@ class Sheet(ProgramBase):
             current_row_number += session_length + 1
 
         return
-    
-    def retrieve_all_merge_ranges(self) -> dict:
-        # Retrieve the full spreadsheet metadata
-        sheet_metadata = self.service.spreadsheets().get(
-            spreadsheetId=self.spreadsheet_id, 
-            fields='sheets'
-        ).execute()
-        sheets = sheet_metadata['sheets']
-
-        # Get merged ranges for the specific sheet by name
-        merged_ranges = {
-            s['properties']['title'] : s.get('merges', []) \
-                for s in sheets
-        }
-        return(merged_ranges)
