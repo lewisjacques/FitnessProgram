@@ -1,7 +1,8 @@
+from copy import copy
 import re
 
 class Session:
-    MUSCLE_GROUPS = [
+    MUSCLE_GROUPS = (
         "BACK",
         "LEGS",
         "BICEPS",
@@ -9,7 +10,17 @@ class Session:
         "CHEST",
         "SHOULDERS",
         "CARDIO"
-    ]
+    )
+    # If arbitrary status added, append them here
+    NON_PRIMARY_STATUSES = ("is_empty")
+    BASE_STATUS = {
+        "is_none": False,
+        "is_rest": False,
+        "is_ill": False,
+        "is_holiday": False,
+        "is_injured": False,
+        "is_valid": False
+    }
 
     def __init__(
         self, 
@@ -25,66 +36,57 @@ class Session:
         Args:
             session_data (dict): exercise, result key-value
             session_length (int): Max exercises per session for the month
-            month (str): Formatted Month given at the top of the month program
+            month (str): Formatted Month given at the top of the month sheet
         """
-        self.session_data = session_data
+
+        # Set the session status defaults
+        self.status = copy(self.BASE_STATUS)
+
+        self.session_data = self.check_session_data(session_data)
+        if self.session_data is None:
+            # If an empty session no need to run further functions
+            return
+        
+        # Meta information
         self.empty_exercise_range = session_data["meta"]["empty_exercise_range"]
         self.session_anchor = session_data["meta"]["session_anchor"]
         self.session_length = session_length
-
-        # Meta information
-        self.log_empty_session()
-        self.log_rest_session()
-        self.log_ill_session()
-        self.log_injured_session()
-        self.log_holiday_session()
-        self.is_valid = not(self.is_none or self.is_rest or self.is_ill or self.is_holiday or self.is_injured)
-
+        self.date = session_data["meta"]["date"]
         self.title = self.session_data["Session Title"]
 
-        # If day has been recorded as something (including rest and ill)
-        if not self.is_none:
-            # Exercise information
-            self.empty_ex = self.check_empty_exercises()
-            self.total_ex = session_length - self.empty_ex - 1 # -1 for Date row
-            self.incomplete_ex = self.check_incomplete_exercises()
-            self.exercises = self.log_exercises()
+        # Exercise information
+        self.empty_ex = self.check_empty_exercises()
+        self.total_ex = session_length - self.empty_ex - 1 # -1 for Date row
+        self.incomplete_ex = self.check_incomplete_exercises()
+        self.exercises = self.log_exercises()
 
-            try:
-                day = re.findall(r"(\d{1,2})", self.title)[0]
-            except IndexError:
-                print(f"Error with title: {self.title}")
-                self.print_session_info()
-                raise(IndexError)
-            # 0 padding day
-            if len(day) == 1:
-                day = f"0{day}"
-            self.date = f"{month}-{day}"
+        try:
+            day = re.findall(r"(\d{1,2})", self.title)[0]
+        except IndexError:
+            print(f"Error with title: {self.title}")
+            self.print_session_info()
+            raise(IndexError)
 
+        # 0 padding day
+        if len(day) == 1:
+            day = f"0{day}"
+        self.date_str = f"{month}-{day}"
+        self.day = day
 
+        # Update status attributes with the now valid session data
+        self.update_session_status()
 
+        #! self.muscle_groups = self.get_muscle_groups(self.title)
+        #! self.summarise_session()
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-            # self.muscle_groups = self.get_muscle_groups(self.title)
+    def check_session_data(self, session_data:dict):
+        # If no session found, set default variables
+        if session_data is None:
+            # Once this is reached whilst building sessions, we've reached the end of the month
+            self.status["is_none"] = True
+            return(None)
         else:
-            self.date = None
-            self.empty_ex = None
-            self.total_ex = None
-            self.incomplete_ex = None
-            self.exercises = None
-            self.muscle_groups = None
+            return(session_data)
 
     def print_session_info(self):
         print(f"""\n
@@ -94,40 +96,50 @@ class Session:
             \tEmpty Exercises :: {self.empty_ex}
             \tIncomplete Exercises :: {self.incomplete_ex}
         """)
-    
-    def log_empty_session(self):
-        if all([
-            k.strip()=="" for i,k in enumerate(self.session_data.keys()) \
-                if (i != 0) and (k != "meta")
-            ]
-        ):
-            self.is_none = True
-        else:
-            self.is_none = False
 
-    def log_rest_session(self):
+    def update_session_status(self):
+        # Capture empty session
+        if all([k.strip()=="" for i,k in enumerate(self.session_data.keys()) \
+            if (i != 0) and (k != "meta")]):
+            
+            self.status["is_empty"] = True
+        # Capture rest sessions
         if "rest" in [k.lower() for k in self.session_data.keys()]:
-            self.is_rest = True
-        else:
-            self.is_rest = False
+            self.status["is_rest"] = True
 
-    def log_ill_session(self):
+        # Capture ill sessions
         if "ill" in [k.lower() for k in self.session_data.keys()]:
-            self.is_ill = True
-        else:
-            self.is_ill = False
+            self.status["is_ill"] = True
 
-    def log_holiday_session(self):
+        # Capture holiday sessions
         if "holiday" in [k.lower() for k in self.session_data.keys()]:
-            self.is_holiday = True
-        else:
-            self.is_holiday = False
+            self.status["is_holiday"] = True
 
-    def log_injured_session(self):
+        # Capture injured sessions
         if "injured" in [k.lower() for k in self.session_data.keys()]:
-            self.is_injured = True
-        else:
-            self.is_injured = False
+            self.status["is_injured"] = True
+
+        # Extract session validity
+        if not(
+            self.status["is_rest"] or \
+            self.status["is_ill"] or \
+            self.status["is_holiday"] or \
+            self.status["is_injured"]
+        ):
+            self.status["is_valid"] = True
+
+        ps = {s:v for s,v in self.status.items() if s not in self.NON_PRIMARY_STATUSES}
+        # Check only one primary status is true, else raise a warning
+        try:
+            assert sum([v for k,v in self.status.items() \
+                if v and k in ps
+            ]) == 1, f"""A session should have exactly one primary status. 
+            {self.date_str}\n\t\t{ps}\n\nSession Values: {self.session_data}
+            """
+        except TypeError:
+            raise TypeError(f"""Type error for session:
+            {self.date_str}\n\t\t{ps}\n\nStatus: {self.status}
+            """)
 
     def log_exercises(self):
         exercises = {}
@@ -147,16 +159,11 @@ class Session:
     
     def check_incomplete_exercises(self):
         return(
-            sum(
-                [1 for e,r in self.session_data.items() \
-                    if (e != "") and (r == "")]
-            )
+            sum([1 for e,r in self.session_data.items() \
+                if (e != "") and (r == "")])
         )
-    
-    #! To do:
-        #! Get the muscle groups within the session
-        #! Summarise the session in relation to max lifts etc.
-    
+
+    #! Function to write
     def get_muscle_groups(self):
         #
         #  Get exercise sheet
@@ -165,45 +172,6 @@ class Session:
 
         return
     
+    #! Function to write
     def summarise_session(self):
         return
-
-    @property
-    def is_none(self) -> bool:
-        return(self._is_none)
-    
-    @is_none.setter
-    def is_none(self, non_flag:bool):
-        self._is_none = non_flag
-
-    @property
-    def is_rest(self) -> bool:
-        return(self._is_rest)
-    
-    @is_rest.setter
-    def is_rest(self, rest_flag:bool):
-        self._is_rest = rest_flag
-
-    @property
-    def is_ill(self) -> bool:
-        return(self._is_ill)
-    
-    @is_ill.setter
-    def is_ill(self, rest_flag:bool):
-        self._is_ill = rest_flag
-
-    @property
-    def is_holiday(self) -> bool:
-        return(self._is_holiday)
-    
-    @is_holiday.setter
-    def is_holiday(self, hol_flag:bool):
-        self._is_holiday = hol_flag
-
-    @property
-    def is_injured(self) -> bool:
-        return(self._is_injured)
-    
-    @is_injured.setter
-    def is_injured(self, inj_flags:bool):
-        self._is_injured = inj_flags

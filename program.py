@@ -36,13 +36,13 @@ class Program:
         with open(self.PROGRAM_SPECS_PATH, 'r') as file:
             self.program_specs = yaml.safe_load(file)
 
-        print(f"\n### --- Parsing Program: {self.program_specs[program_name]['pretty']} --- ###")
+        print(f"\n### --- Parsing Program: {self.program_specs[program_name]['pretty']} --- ###", end="\n")
 
         # Pull out variables for the relevant sheet
         program_specs = self.program_specs[program_name]
         parsed_comment_location = program_specs['parsed_comments']
         legacy_comment_location = program_specs['legacy_comments']
-        sheet_id = program_specs['sheet_id']
+        spreadsheet_id = program_specs['sheet_id']
 
         # If running the testing program, duplicate by default
         if program_name == "test":
@@ -53,10 +53,11 @@ class Program:
         # Initialise sheet access, duplicate sheet if duplicate=True and parse months
         self.sheet = Sheet(
             program_name, 
-            sheet_id, 
+            spreadsheet_id, 
             duplicate, 
             verbose,
-            sheet_names
+            sheet_names,
+            clean_parsed_months=False #! Change for testing
         )
 
         ### --- Get / Generate Archived Comments --- ###
@@ -68,14 +69,14 @@ class Program:
             reparse_legacy
         )
 
-        ### --- Combine Legacy and New Format Month Data --- ###
+        # ### --- Combine Legacy and New Format Month Data --- ###
 
         all_exercise_df = self.concatenate_all_months(
             legacy_exercise_df,
             self.sheet.month_instances
         )
 
-        ### --- Enrich Logged Results --- ###
+        # ### --- Enrich Logged Results --- ###
 
         enriched_logs_df = self.enrich_logs(all_exercise_df)
 
@@ -85,8 +86,8 @@ class Program:
             tab_name="Logs (via Python)"
         )
 
-        ### --- Add Missing Months --- ###
-
+        ## --- Add Missing Months --- ###
+        
         all_months = [m.sheet_name for m in self.sheet.month_instances.values()]
 
         current_month_dt = datetime.now()
@@ -94,24 +95,17 @@ class Program:
         next_month_dt = datetime.now() + relativedelta(months=1)
         next_month_str = next_month_dt.strftime("%b %y")
 
-        clean_month = True
-
-        # Always be one month ahead
+        # Always be one month ahead, add missing months
         if current_month_str not in all_months:
             # Add new month (if necessary) and clean the formatting with clean_new_month()
-            self.sheet.add_new_month(current_month_dt, clean=clean_month)
-        if next_month_str not in  all_months:
+            self.sheet.add_new_month(current_month_dt)
+        if next_month_str not in all_months:
             # Add new month (if necessary) and clean the formatting with clean_new_month()
-            self.sheet.add_new_month(next_month_dt, clean=clean_month)
-
-        ### --- Clean Month Sheets By Merging Unused Cells --- ###
-
-        # Clean the months by merging unused cells and prettifying the program
-        # self.sheet.clean_sessions()
+            self.sheet.add_new_month(next_month_dt)
 
         ### --- Program Meta --- ###
 
-        # self.get_program_meta(self.sheet.month_instances, verbose)
+        #! self.get_program_meta(self.sheet.month_instances, verbose)
 
         print("\tComplete\n")
 
@@ -178,6 +172,9 @@ class Program:
                 "Cell Data": "Exercise",
                 "Comment": "Result"
             }, inplace=True)
+
+            # Set the date to a date 
+            exercise_df["Date"] = pd.to_datetime(exercise_df["Date"], format="%Y-%m-%d")
         else:
             exercise_df = pd.DataFrame(columns=[
                 "Date",
@@ -189,29 +186,31 @@ class Program:
         for month_instance in month_instances.values():
             for session in month_instance.month_sessions:
                 # Not empty and not a rest day
-                if session.is_valid:
+                if session.status["is_valid"]:
                     for ex, result in session.exercises.items():
                         # Skipped exercise block
                         if ex == "" or ex == "meta":
                             continue
 
-                        exercise_df = pd.concat(
-                            [
-                                pd.DataFrame({
-                                    "Date": session.date,
-                                    "Exercise": ex,
-                                    "Result": result
-                                }, index=[0]),
-                                exercise_df
-                            ],
-                            ignore_index=True
-                        )
+                        new_row = pd.DataFrame({
+                            "Date": session.date,
+                            "Exercise": ex,
+                            "Result": result
+                        }, index=[0])
+
+                        # Check if exercise_df is empty or not defined
+                        if exercise_df is None or exercise_df.empty:
+                            # If empty, assign the new row directly
+                            exercise_df = new_row
+                        else:
+                            # Append the new row to the existing DataFrame
+                            exercise_df = pd.concat([new_row, exercise_df], ignore_index=True)
         
         return(exercise_df.sort_values(["Date"]))
     
     def find_result(self, result):
         """
-        Get a rough estimate of the exercise result. Long term this will be an 
+        Build a programmatic estimate of the exercise result. Long term this will be an 
         NLP-like system of finding similar strings
 
         Args:
@@ -268,6 +267,7 @@ class Program:
         Args:
             all_exercise_df (pd.DataFrame): Legacy and new format month logged sessions
         """
+        all_exercise_df["Date"] = all_exercise_df["Date"].dt.date
 
         # Get kg value, if no kg value find take the next largest number
         all_exercise_df["Weight"] = all_exercise_df["Result"].apply(self.find_result)

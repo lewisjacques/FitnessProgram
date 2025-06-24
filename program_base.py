@@ -1,10 +1,166 @@
-from gspread import Spreadsheet
+from oauth2client.service_account import ServiceAccountCredentials
+from googleapiclient.discovery import build
+from datetime import date
+import gspread
 
-class GoogleSheetsAPIRequests:
-    def __init__(self, gspread_sheet_instance:Spreadsheet):
-        self.g_sheet = gspread_sheet_instance
-        return
+class ProgramBase:
+    SCOPES = [
+        'https://www.googleapis.com/auth/spreadsheets',
+        'https://www.googleapis.com/auth/drive'
+    ]
+    CREDENTIALS_PATH = 'credentials/sa_program_update.json'
+
+    # Shared state
+    _gc = None
+    _initialized = False
+    _service = None
+    _creds = None
+
+    # Cache per spreadsheet ID
+    _cached_sheets = {}
+    _cached_worksheets = {}
+
+    def __init__(self, spreadsheet_id:str, refresh_sheet:bool=True):
+        # Only initialize shared state once
+
+        #! This isn't working the way it should
+        
+        if not ProgramBase._initialized:
+            print("Initializing ProgramBase...")
+            creds = self.verify_user()
+            ProgramBase._creds = creds
+            self.init_class_variables(spreadsheet_id)
+
+        self._spreadsheet_id = spreadsheet_id
+
+        if refresh_sheet or spreadsheet_id not in ProgramBase._cached_sheets:
+            print(f"Initialising sheet. Spreadsheet id: {spreadsheet_id}")
+            self.g_sheet = self.init_sheet(spreadsheet_id)
+
+    # Modify class level specific variables, not instance level
+    @classmethod
+    def init_class_variables(cls, spreadsheet_id:str):
+        """
+        Initialize the shared class-level variables. Called on
+        ProgramBase rather than cls to avoid writing variables
+        to the subclass instance
+        """
+        print("Initialising class variables")
+        ProgramBase._initialized = True
+        ProgramBase.spreadsheet_id = spreadsheet_id
+
+        # Service object to apply conditional formatting
+        ProgramBase._service = build('sheets', 'v4', credentials=ProgramBase._creds)
+        # Authorise Google Cloud access
+        ProgramBase._gc = gspread.authorize(ProgramBase._creds)
+
+    def init_sheet(self, spreadsheet_id:str):
+        """
+        Refresh Worksheet for provided spreadsheet ID
+        """
+        # Update the spreadsheet id
+        ProgramBase.spreadsheet_id = spreadsheet_id
+        # Initialise google sheet instance
+        print("Refresh gspread spreadsheet instance")
+        return(self.gc.open_by_key(spreadsheet_id))
     
+    @property
+    def spreadsheet_id(self):
+        return self._spreadsheet_id
+    
+    @property
+    def g_sheet(self):
+        if self.spreadsheet_id not in ProgramBase._cached_sheets:
+            print(f"Lazy loading g_sheet for: {self.spreadsheet_id}")
+            ProgramBase._cached_sheets[self.spreadsheet_id] = self.init_sheet(self.spreadsheet_id)
+        return ProgramBase._cached_sheets[self.spreadsheet_id]
+
+    @g_sheet.setter
+    def g_sheet(self, value):
+        ProgramBase._cached_sheets[self.spreadsheet_id] = value
+
+    @property
+    def spreadsheet_id(self):
+        return ProgramBase._spreadsheet_id
+    
+    @property
+    def service(self):
+        return ProgramBase._service
+    
+    @property
+    def gc(self):
+        if ProgramBase._gc is None:
+            raise ValueError("Google Sheets client (_gc) has not been initialized. Ensure init_class_variables() was called.")
+        print("Returning _gc")
+        return ProgramBase._gc
+    
+    def get_worksheets(self):
+        sid = self.spreadsheet_id
+        if sid not in ProgramBase._cached_worksheets:
+            print("Caching worksheets for", sid)
+            ProgramBase._cached_worksheets[sid] = self.g_sheet.worksheets()
+        else:
+            print("Using cached worksheets for", sid)
+        return ProgramBase._cached_worksheets[sid]
+    
+    def get_sheet(self, sheet_name:str):
+        return(self.g_sheet.worksheet(sheet_name))
+
+    def duplicate_sheet(self, program_name: str, spreadsheet_id: str):
+        new_spreadsheet = self.gc.copy(
+            spreadsheet_id,
+            title=f"[Test] - Root Program:: {program_name.capitalize()} {date.today()}",
+            copy_permissions=True,
+            folder_id="1rdON9vpywCPYp_a_gwxzOciYVQm1DdyR"
+        )
+        return new_spreadsheet.id
+
+    def find_sheet_id(self, sheet_name:str, pre_processed:bool, spreadsheet_id:str):
+        # Not currently added to gspread instance
+        if not pre_processed:
+            # Need to update the gspread instance
+            print("Reinitialising g_sheet")
+            g_sheet = self.init_sheet(spreadsheet_id)
+        else:
+            g_sheet = self.g_sheet
+
+        sheet_id = g_sheet.worksheet(
+            sheet_name
+        )._properties['sheetId']
+        return sheet_id
+
+    def verify_user(self):
+        """
+        Return the credentials object derived from the service account
+        credentials file
+
+        Returns:
+            ServiceAccountCredentials: Google Sheets API credentials
+        """
+
+        creds = ServiceAccountCredentials.from_json_keyfile_name(
+            self.CREDENTIALS_PATH,
+            self.SCOPES
+        )
+        return creds
+    
+    def retrieve_all_merge_ranges(self) -> dict:
+        # Retrieve the full spreadsheet metadata
+        sheet_metadata = self._service.spreadsheets().get(
+            spreadsheetId=self._spreadsheet_id, 
+            fields='sheets'
+        ).execute()
+        sheets = sheet_metadata['sheets']
+
+        # Get merged ranges for the specific sheet by name
+        merged_ranges = {
+            s['properties']['title'] : s.get('merges', []) \
+                for s in sheets
+        }
+        return(merged_ranges)
+    
+    ### --- API Requests --- ###
+
     def run_requests(
         self, 
         requests:list
@@ -144,8 +300,6 @@ class GoogleSheetsAPIRequests:
     ):
         
         assert (not new_value) or (new_value and sheet_name)
-
-        print(f"\t\tMerging cells: ({start_row},{start_col}) -> ({end_row}, {end_col})")
 
         ### --- Handle Data Validation --- ###
 
