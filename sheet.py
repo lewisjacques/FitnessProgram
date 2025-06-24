@@ -96,25 +96,19 @@ class Sheet(ProgramBase):
         month_instances = dict()
 
         for month_sheet_name in parse_sheets:
-            print(f"\tParsing Sheet: {month_sheet_name}")
+            print(f"\tParsing Sheet: {month_sheet_name}", end="")
             # Get raw month data
             month_data = self.get_sheet(month_sheet_name).get_all_values()
             # Get merged ranges for this sheet
             month_merged_ranges = self.merged_ranges[month_sheet_name]
 
-
-
-
-
-
-            #! Month not correctly assigning day 1
             month_instance = Month(
                 data=month_data,
                 spreadsheet_id=self.spreadsheet_id,
                 sheet_name=month_sheet_name,
                 merged_ranges=month_merged_ranges
             )
-            print(month_instance)
+            print(f": {month_instance}")
 
             ### --- Clean Month Sheets By Merging Unused Cells --- ###
 
@@ -182,7 +176,6 @@ class Sheet(ProgramBase):
         }
 
         # Set day 1
-        print(f"Updating {day_mapping[first_day]}4")
         new_ws.update(f"{day_mapping[first_day]}4", 1)
         # Give the template a title
         new_ws.update("B2", new_month.strftime("%B %Y"))
@@ -276,7 +269,6 @@ class Sheet(ProgramBase):
         # Set current week to be the week after the final week row number
         current_row_number = fw_row_number + session_length - 1
         while current_row_number < 54:
-            print(f"Removing days from week on row {current_row_number}")
             self.merge_cells(
                 sheet_id=new_month_instance.sheet_id,
                 start_row=current_row_number,

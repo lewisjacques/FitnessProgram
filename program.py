@@ -36,7 +36,7 @@ class Program:
         with open(self.PROGRAM_SPECS_PATH, 'r') as file:
             self.program_specs = yaml.safe_load(file)
 
-        print(f"\n### --- Parsing Program: {self.program_specs[program_name]['pretty']} --- ###")
+        print(f"\n### --- Parsing Program: {self.program_specs[program_name]['pretty']} --- ###", end="\n")
 
         # Pull out variables for the relevant sheet
         program_specs = self.program_specs[program_name]
@@ -87,7 +87,7 @@ class Program:
         )
 
         ## --- Add Missing Months --- ###
-        print(self.sheet.month_instances)
+        
         all_months = [m.sheet_name for m in self.sheet.month_instances.values()]
 
         current_month_dt = datetime.now()
@@ -95,15 +95,11 @@ class Program:
         next_month_dt = datetime.now() + relativedelta(months=1)
         next_month_str = next_month_dt.strftime("%b %y")
 
-        # Always be one month ahead
+        # Always be one month ahead, add missing months
         if current_month_str not in all_months:
-            print(all_months)
-            print(f"Not found {current_month_str}")
             # Add new month (if necessary) and clean the formatting with clean_new_month()
             self.sheet.add_new_month(current_month_dt)
         if next_month_str not in all_months:
-            print(all_months)
-            print(f"Not found {next_month_str}")
             # Add new month (if necessary) and clean the formatting with clean_new_month()
             self.sheet.add_new_month(next_month_dt)
 
