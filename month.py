@@ -21,7 +21,7 @@ class Month(ProgramBase):
                 (this method prevents having to pass a gspread instance between classes)
         """
         # Initialise ProgramBase variables and credentials (actually pulls already initialised class)
-        super().__init__(spreadsheet_id)
+        super().__init__(spreadsheet_id, refresh_sheet=False)
 
         self.month_values = data
         self.sheet_name = sheet_name
@@ -59,8 +59,8 @@ class Month(ProgramBase):
 
     def find_dayx(self, day_num:int=1, row_num:int=4):
         """
-        Iterate through row 4 to find day 1 so we can subsequently find day 8
-        to get hold of the session length
+        Iterate through columns to find day 'day_num' and locate the
+        session boundaries of the sheet for that day
 
         Raises:
             Exception: If day x not identified
@@ -81,7 +81,7 @@ class Month(ProgramBase):
         
         if day_x_column_index is None:
             # Convert to custom exception class in future
-            raise Exception(f"Day {day_num} Column not identified")
+            raise Exception(f"Column for day, {day_num}, not identified in row, {row_num}")
         
         return(day_x_column_index)
     

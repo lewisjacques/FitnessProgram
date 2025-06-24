@@ -16,21 +16,26 @@ class ProgramBase:
     _service = None
     _creds = None
 
-    def __init__(self, spreadsheet_id):
+    # Cache per spreadsheet ID
+    _cached_sheets = {}
+    _cached_worksheets = {}
+
+    def __init__(self, spreadsheet_id:str, refresh_sheet:bool=True):
         # Only initialize shared state once
 
         #! This isn't working the way it should
         
         if not ProgramBase._initialized:
             print("Initializing ProgramBase...")
-            ProgramBase._creds = self.verify_user()
-            print("Initialising variables (class and instance)")
+            creds = self.verify_user()
+            ProgramBase._creds = creds
             self.init_class_variables(spreadsheet_id)
-            self.init_instance_variables(spreadsheet_id)
-        else:
-            print(f"New spreadsheet id: {spreadsheet_id}")
-            print("Initialising instance variables")
-            self.init_instance_variables(spreadsheet_id)
+
+        self._spreadsheet_id = spreadsheet_id
+
+        if refresh_sheet or spreadsheet_id not in ProgramBase._cached_sheets:
+            print(f"Initialising sheet. Spreadsheet id: {spreadsheet_id}")
+            self.g_sheet = self.init_sheet(spreadsheet_id)
 
     # Modify class level specific variables, not instance level
     @classmethod
@@ -40,17 +45,39 @@ class ProgramBase:
         ProgramBase rather than cls to avoid writing variables
         to the subclass instance
         """
+        print("Initialising class variables")
         ProgramBase._initialized = True
-        ProgramBase._spreadsheet_id = spreadsheet_id
+        ProgramBase.spreadsheet_id = spreadsheet_id
+
         # Service object to apply conditional formatting
         ProgramBase._service = build('sheets', 'v4', credentials=ProgramBase._creds)
+        # Authorise Google Cloud access
+        ProgramBase._gc = gspread.authorize(ProgramBase._creds)
 
-    def init_instance_variables(self, spreadsheet_id:str):
+    def init_sheet(self, spreadsheet_id:str):
         """
-        Initialize the shared class-level variables
+        Refresh Worksheet for provided spreadsheet ID
         """
+        # Update the spreadsheet id
+        ProgramBase.spreadsheet_id = spreadsheet_id
         # Initialise google sheet instance
-        self.g_sheet = self.gc.open_by_key(spreadsheet_id)
+        print("Refresh gspread spreadsheet instance")
+        return(self.gc.open_by_key(spreadsheet_id))
+    
+    @property
+    def spreadsheet_id(self):
+        return self._spreadsheet_id
+    
+    @property
+    def g_sheet(self):
+        if self.spreadsheet_id not in ProgramBase._cached_sheets:
+            print(f"Lazy loading g_sheet for: {self.spreadsheet_id}")
+            ProgramBase._cached_sheets[self.spreadsheet_id] = self.init_sheet(self.spreadsheet_id)
+        return ProgramBase._cached_sheets[self.spreadsheet_id]
+
+    @g_sheet.setter
+    def g_sheet(self, value):
+        ProgramBase._cached_sheets[self.spreadsheet_id] = value
 
     @property
     def spreadsheet_id(self):
@@ -68,7 +95,13 @@ class ProgramBase:
         return ProgramBase._gc
     
     def get_worksheets(self):
-        return(self.g_sheet.worksheets())
+        sid = self.spreadsheet_id
+        if sid not in ProgramBase._cached_worksheets:
+            print("Caching worksheets for", sid)
+            ProgramBase._cached_worksheets[sid] = self.g_sheet.worksheets()
+        else:
+            print("Using cached worksheets for", sid)
+        return ProgramBase._cached_worksheets[sid]
     
     def get_sheet(self, sheet_name:str):
         return(self.g_sheet.worksheet(sheet_name))
@@ -86,9 +119,12 @@ class ProgramBase:
         # Not currently added to gspread instance
         if not pre_processed:
             # Need to update the gspread instance
-            self.init_instance_variables(spreadsheet_id)
+            print("Reinitialising g_sheet")
+            g_sheet = self.init_sheet(spreadsheet_id)
+        else:
+            g_sheet = self.g_sheet
 
-        sheet_id = self.g_sheet.worksheet(
+        sheet_id = g_sheet.worksheet(
             sheet_name
         )._properties['sheetId']
         return sheet_id

@@ -102,6 +102,12 @@ class Sheet(ProgramBase):
             # Get merged ranges for this sheet
             month_merged_ranges = self.merged_ranges[month_sheet_name]
 
+
+
+
+
+
+            #! Month not correctly assigning day 1
             month_instance = Month(
                 data=month_data,
                 spreadsheet_id=self.spreadsheet_id,
@@ -116,13 +122,6 @@ class Sheet(ProgramBase):
                 # Clean the months by merging unused cells and prettifying the program
                 month_instance.clean_sessions()
 
-
-
-
-
-            #! All pointing to the same month_instance
-
-
             month_instances[month_sheet_name] = month_instance
 
         return(month_instances)
@@ -135,11 +134,10 @@ class Sheet(ProgramBase):
             sheet_name (str): Name of the sheet to process
         """
 
-        print(f"\t\t\tProcessing New Month: {sheet_name}")
+        print(f"\t\tProcessing New Month: {sheet_name}")
         # Get raw month data
-        month_data = new_month_ws.get_all_values()
-        # Get merged ranges for this sheet
-
+        month_data = new_month_ws.get_values()
+        # Initialise Month instance to get merged ranges for this sheet
         month_instance = Month(
             data=month_data,
             spreadsheet_id=self.spreadsheet_id,
@@ -150,7 +148,6 @@ class Sheet(ProgramBase):
 
         return(month_instance)
         
-    
     def add_new_month(self, new_month:datetime, clean=True):
         print(f"\n\t\tAdding New Month: {new_month.strftime('%b %y')}")
         all_sheets = [s.title for s in self.get_worksheets()]
@@ -185,6 +182,7 @@ class Sheet(ProgramBase):
         }
 
         # Set day 1
+        print(f"Updating {day_mapping[first_day]}4")
         new_ws.update(f"{day_mapping[first_day]}4", 1)
         # Give the template a title
         new_ws.update("B2", new_month.strftime("%B %Y"))
@@ -197,25 +195,25 @@ class Sheet(ProgramBase):
             sheet_name=new_month_meta["sheet_name"]
         )
         if clean:
-            # Clean book ends of the new sheet
-            self.clean_new_month(new_month_inst)
+            # Clean 'book end' days of the new sheet
+            self.clean_new_month(
+                new_month_inst,
+                first_day_index=first_day
+            )
 
-        return
+        self.month_instances[new_month_meta["sheet_name"]] = new_month_inst
 
     @staticmethod
-    def get_week_number(date:datetime):
-        # Get the first day of the month
+    def get_week_number(date: datetime):
         first_day = date.replace(day=1)
-        # Find the first Sunday of the month
-        first_sunday = first_day + timedelta(days=(6 - first_day.weekday()) % 7)
-        # Calculate the difference in days between the first Sunday and the given date
-        days_difference = (date - first_sunday).days
-        # Calculate the week number
-        week_number = days_difference // 7 + 1 if days_difference >= 0 else 1
+        first_weekday = (first_day.weekday() + 1) % 7  
+        # Day offset within the first week
+        adjusted_day = first_weekday + date.day - 1
+        week_number = (adjusted_day // 7) + 1
         return week_number
     
-    def clean_new_month(self, new_month_instance:str):
-        print("\t\t\tCleaning new month")
+    def clean_new_month(self, new_month_instance:str, first_day_index:int):
+        print("\t\tCleaning new month")
 
         ### ---  Remove unnecessary pre days --- ###
 
@@ -227,18 +225,20 @@ class Sheet(ProgramBase):
         final_session_row = session_length + 3
         final_session_col = new_month_instance.day1_column_index
 
-        self.merge_cells(
-            sheet_id=new_month_instance.sheet_id,
-            start_row=first_session_row,
-            end_row=final_session_row,
-            start_col=first_session_col,
-            end_col=final_session_col,
-            colour={"red":1, "green":0.976, "blue":0.905},
-            remove_data_validation=False,
-            new_value=" ",
-            sheet_name=new_month_instance.sheet_name,
-            colour_borders=True
-        )
+        # Sundays require no removal of prior days
+        if first_day_index != 6:
+            self.merge_cells(
+                sheet_id=new_month_instance.sheet_id,
+                start_row=first_session_row,
+                end_row=final_session_row,
+                start_col=first_session_col,
+                end_col=final_session_col,
+                colour={"red":1, "green":0.976, "blue":0.905},
+                remove_data_validation=False,
+                new_value=" ",
+                sheet_name=new_month_instance.sheet_name,
+                colour_borders=True
+            )
 
         ### --- Remove Unnecessary Post Days --- ###
 
@@ -252,7 +252,7 @@ class Sheet(ProgramBase):
         month_final_day_dt_obj = month_dt_obj.replace(day=month_final_day)
         # Get the week number of the final day so we can find the row number it sits on
         final_week_number = self.get_week_number(month_final_day_dt_obj)
-        fw_row_number = (final_week_number*session_length) + 4
+        fw_row_number = ((final_week_number-1)*session_length) + 4
 
         # If final day is a Saturday, no cells to merge this month
         if month_final_day_dt_obj.weekday() != 5:
@@ -276,6 +276,7 @@ class Sheet(ProgramBase):
         # Set current week to be the week after the final week row number
         current_row_number = fw_row_number + session_length - 1
         while current_row_number < 54:
+            print(f"Removing days from week on row {current_row_number}")
             self.merge_cells(
                 sheet_id=new_month_instance.sheet_id,
                 start_row=current_row_number,
@@ -290,4 +291,4 @@ class Sheet(ProgramBase):
             )
             current_row_number += session_length + 1
 
-        return
+        return(new_month_instance)
