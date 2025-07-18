@@ -4,7 +4,7 @@ import argparse
 # Currently updating sheets
 known_programs = ('lew', 'hope', 'test',)
 
-if __name__ == "__main__":
+def main():
     parser = argparse.ArgumentParser(
         prog='Fitness Program Functionality',
         description='Update the program with the latest comments'
@@ -88,3 +88,4 @@ if __name__ == "__main__":
             sheet_names=args.sheet_names,
             duplicate=args.duplicate
         )
+    return(prog)
