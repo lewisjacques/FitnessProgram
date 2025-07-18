@@ -5,36 +5,6 @@ import argparse
 known_programs = ('lew', 'hope', 'test',)
 
 def main():
-    parser = argparse.ArgumentParser(
-        prog='Fitness Program Functionality',
-        description='Update the program with the latest comments'
-    )
-    parser.add_argument(
-        '--program', default='lew',
-        help='Program-name to specify which sheet/legacy comments to access'
-    )
-    parser.add_argument(
-        '--reparse_legacy', action=argparse.BooleanOptionalAction,
-        help="reparse a new copy of the legacy Google Sheet comments"
-    )
-    parser.add_argument(
-        '--verbose', action=argparse.BooleanOptionalAction, default=False,
-        help="Print out additional meta information about the program"
-    )
-    parser.add_argument(
-        '--sheet_names', nargs='+', default=["all"],
-        help="Specify which sheet names to parse in parentheses", 
-        required=False
-    )
-    parser.add_argument(
-        '--duplicate', action=argparse.BooleanOptionalAction,
-        help="Duplicate program before running any updates"
-    )
-
-    args = parser.parse_args()
-
-    assert args.program in known_programs or args.program == "all", \
-        f'Program name should be one of {known_programs}'
 
     ### --- Make Updates to the Program Sheet --- ###
 
@@ -72,20 +42,11 @@ def main():
     #!  - Store Template sheets in a seperate document with specified colours 
     #!      and session numbers
 
-    if args.program == "all":
-        for p in known_programs:
-            prog = Program(
-                program_name=p,
-                reparse_legacy=args.reparse_legacy,
-                verbose=args.verbose,
-                sheet_names=args.sheet_names
-            )
-    else:
+    for p in known_programs:
         prog = Program(
-            program_name=args.program,
-            reparse_legacy=args.reparse_legacy,
-            verbose=args.verbose,
-            sheet_names=args.sheet_names,
-            duplicate=args.duplicate
+            program_name=p,
+            reparse_legacy=False,
+            verbose=True,
+            sheet_names="all"
         )
     return(prog)
