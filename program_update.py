@@ -2,7 +2,7 @@ from program import Program
 import argparse
 
 # Currently updating sheets
-known_programs = ('test',)
+known_programs = ('lew', 'hope', 'test',)
 
 def main():
 
@@ -47,7 +47,8 @@ def main():
             program_name=p,
             reparse_legacy=False,
             verbose=True,
-            sheet_names=["all"]
+            sheet_names=["all"],
+            duplicate=False
         )
     return(prog)
 
