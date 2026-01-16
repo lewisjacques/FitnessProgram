@@ -148,7 +148,7 @@ class Sheet(ProgramBase):
         return(month_instance)
         
     def add_new_month(self, new_month:datetime, clean=True):
-        print(f"\n\t\tAdding New Month: {new_month.strftime('%b %y')}")
+        print(f"\n\tAdding New Month: {new_month.strftime('%b %y')}")
         all_sheets = self.get_sheet_titles()
         
         new_month_meta = {
