@@ -1,6 +1,7 @@
 from oauth2client.service_account import ServiceAccountCredentials
 from googleapiclient.discovery import build
 from datetime import date
+from functools import cached_property
 import gspread
 
 class ProgramBase:
@@ -15,27 +16,35 @@ class ProgramBase:
     _initialized = False
     _service = None
     _creds = None
-
-    # Cache per spreadsheet ID
-    _cached_sheets = {}
-    _cached_worksheets = {}
+    _current_spreadsheet_id = None  # Track the active spreadsheet_id at class level
+    
+    # Class-level caches shared across all instances
+    _g_sheet_cache = {}  # Cache g_sheet objects per spreadsheet_id
+    _worksheets_cache = {}  # Cache all worksheets list per spreadsheet_id
+    _worksheet_dict_cache = {}  # Cache worksheets as dict {name: worksheet} per spreadsheet_id
 
     def __init__(self, spreadsheet_id:str, refresh_sheet:bool=True):
-        # Only initialize shared state once
-
-        #! This isn't working the way it should
+        # Initialize instance-level cache for sheets by name
+        self._sheet_cache = {}
+        self._merge_ranges_cache = None
         
+        # Only initialize shared state once
         if not ProgramBase._initialized:
-            print("Initializing ProgramBase...")
             creds = self.verify_user()
             ProgramBase._creds = creds
             self.init_class_variables(spreadsheet_id)
 
+        # Check if spreadsheet_id is changing at class level
+        spreadsheet_id_changed = ProgramBase._current_spreadsheet_id != spreadsheet_id
+        
+        if spreadsheet_id_changed:
+            # Clear instance caches when switching spreadsheets
+            self._sheet_cache.clear()
+            self._merge_ranges_cache = None
+        
+        # Update the active spreadsheet_id
+        ProgramBase._current_spreadsheet_id = spreadsheet_id
         self._spreadsheet_id = spreadsheet_id
-
-        if refresh_sheet or spreadsheet_id not in ProgramBase._cached_sheets:
-            print(f"Initialising sheet. Spreadsheet id: {spreadsheet_id}")
-            self.g_sheet = self.init_sheet(spreadsheet_id)
 
     # Modify class level specific variables, not instance level
     @classmethod
@@ -58,8 +67,6 @@ class ProgramBase:
         """
         Refresh Worksheet for provided spreadsheet ID
         """
-        # Update the spreadsheet id
-        ProgramBase.spreadsheet_id = spreadsheet_id
         # Initialise google sheet instance
         print("Refresh gspread spreadsheet instance")
         return(self.gc.open_by_key(spreadsheet_id))
@@ -70,18 +77,12 @@ class ProgramBase:
     
     @property
     def g_sheet(self):
-        if self.spreadsheet_id not in ProgramBase._cached_sheets:
-            print(f"Lazy loading g_sheet for: {self.spreadsheet_id}")
-            ProgramBase._cached_sheets[self.spreadsheet_id] = self.init_sheet(self.spreadsheet_id)
-        return ProgramBase._cached_sheets[self.spreadsheet_id]
-
-    @g_sheet.setter
-    def g_sheet(self, value):
-        ProgramBase._cached_sheets[self.spreadsheet_id] = value
-
-    @property
-    def spreadsheet_id(self):
-        return ProgramBase._spreadsheet_id
+        """Get or create cached g_sheet for this spreadsheet_id."""
+        sid = self.spreadsheet_id
+        if sid not in ProgramBase._g_sheet_cache:
+            print(f"Loading g_sheet for {sid}")
+            ProgramBase._g_sheet_cache[sid] = self.init_sheet(sid)
+        return ProgramBase._g_sheet_cache[sid]
     
     @property
     def service(self):
@@ -91,20 +92,90 @@ class ProgramBase:
     def gc(self):
         if ProgramBase._gc is None:
             raise ValueError("Google Sheets client (_gc) has not been initialized. Ensure init_class_variables() was called.")
-        print("Returning _gc")
         return ProgramBase._gc
     
-    def get_worksheets(self):
+    @property
+    def worksheets(self):
+        """
+        Returns cached worksheets list for the current spreadsheet ID.
+        Shared across all instances of the same spreadsheet.
+        """
         sid = self.spreadsheet_id
-        if sid not in ProgramBase._cached_worksheets:
-            print("Caching worksheets for", sid)
-            ProgramBase._cached_worksheets[sid] = self.g_sheet.worksheets()
-        else:
-            print("Using cached worksheets for", sid)
-        return ProgramBase._cached_worksheets[sid]
+        if sid not in ProgramBase._worksheets_cache:
+            ws_list = self.g_sheet.worksheets()
+            ProgramBase._worksheets_cache[sid] = ws_list
+            # Also build the dict cache for fast lookups
+            ProgramBase._worksheet_dict_cache[sid] = {ws.title: ws for ws in ws_list}
+        return ProgramBase._worksheets_cache[sid]
     
-    def get_sheet(self, sheet_name:str):
-        return(self.g_sheet.worksheet(sheet_name))
+    def get_worksheets(self):
+        """Backward compatibility wrapper for worksheets property."""
+        return self.worksheets
+    
+    def get_sheet_titles(self) -> list[str]:
+        """
+        Get list of all worksheet titles in the spreadsheet.
+        
+        Returns:
+            list[str]: List of worksheet title strings
+        """
+        return [s.title for s in self.worksheets]
+    
+    def get_sheet(self, sheet_name: str):
+        """
+        Get a worksheet by name from the cached worksheet dictionary.
+        Ensures worksheets are cached first, then retrieves from cache.
+        
+        Args:
+            sheet_name (str): Name of the worksheet to retrieve
+            
+        Returns:
+            gspread.Worksheet: The requested worksheet object
+        """
+        # Ensure worksheets are cached (this builds the dict cache too)
+        _ = self.worksheets
+        
+        sid = self.spreadsheet_id
+        ws_dict = ProgramBase._worksheet_dict_cache.get(sid, {})
+        
+        if sheet_name in ws_dict:
+            return ws_dict[sheet_name]
+        else:
+            # Fallback if not in cache (shouldn't happen if worksheets are cached)
+            return self.g_sheet.worksheet(sheet_name)
+
+    def invalidate_worksheet_cache(self, sheet_name: str = None):
+        """
+        Invalidate cached worksheet references when sheets are modified.
+        
+        Args:
+            sheet_name (str, optional): Specific sheet name to invalidate. 
+                                       If None, invalidates all sheets for this spreadsheet.
+        """
+        sid = self.spreadsheet_id
+        if sheet_name is None:
+            # Clear all caches for this spreadsheet
+            if sid in ProgramBase._worksheets_cache:
+                del ProgramBase._worksheets_cache[sid]
+            if sid in ProgramBase._worksheet_dict_cache:
+                del ProgramBase._worksheet_dict_cache[sid]
+            self._sheet_cache.clear()
+            print(f"Invalidated all worksheet caches for {sid}")
+        else:
+            # Invalidate specific worksheet
+            if sid in ProgramBase._worksheet_dict_cache:
+                if sheet_name in ProgramBase._worksheet_dict_cache[sid]:
+                    del ProgramBase._worksheet_dict_cache[sid][sheet_name]
+            if sheet_name in self._sheet_cache:
+                del self._sheet_cache[sheet_name]
+            print(f"Invalidated worksheet cache for: {sheet_name}")
+    
+    def invalidate_merge_ranges_cache(self):
+        """
+        Invalidate cached merge ranges when sheets are modified.
+        """
+        self._merge_ranges_cache = None
+        print(f"Invalidated merge ranges cache for {self.spreadsheet_id}")
 
     def duplicate_sheet(self, program_name: str, spreadsheet_id: str):
         new_spreadsheet = self.gc.copy(
@@ -116,17 +187,12 @@ class ProgramBase:
         return new_spreadsheet.id
 
     def find_sheet_id(self, sheet_name:str, pre_processed:bool, spreadsheet_id:str):
-        # Not currently added to gspread instance
-        if not pre_processed:
-            # Need to update the gspread instance
-            print("Reinitialising g_sheet")
-            g_sheet = self.init_sheet(spreadsheet_id)
-        else:
-            g_sheet = self.g_sheet
-
-        sheet_id = g_sheet.worksheet(
-            sheet_name
-        )._properties['sheetId']
+        """
+        Get the sheet ID for a given sheet name.
+        Always uses the cached g_sheet to avoid redundant API calls.
+        """
+        # Use the cached g_sheet property - works for both pre_processed and non-pre_processed
+        sheet_id = self.g_sheet.worksheet(sheet_name)._properties['sheetId']
         return sheet_id
 
     def verify_user(self):
@@ -145,19 +211,53 @@ class ProgramBase:
         return creds
     
     def retrieve_all_merge_ranges(self) -> dict:
-        # Retrieve the full spreadsheet metadata
-        sheet_metadata = self._service.spreadsheets().get(
-            spreadsheetId=self._spreadsheet_id, 
-            fields='sheets'
-        ).execute()
-        sheets = sheet_metadata['sheets']
+        """
+        Retrieve merged cell ranges for all sheets in the spreadsheet.
+        Results are cached to avoid repeated metadata API calls.
+        
+        Returns:
+            dict: Dictionary mapping sheet names to their merge ranges
+        """
+        if self._merge_ranges_cache is None:
+            # Retrieve the full spreadsheet metadata
+            sheet_metadata = self._service.spreadsheets().get(
+                spreadsheetId=self._spreadsheet_id, 
+                fields='sheets'
+            ).execute()
+            sheets = sheet_metadata['sheets']
 
-        # Get merged ranges for the specific sheet by name
-        merged_ranges = {
-            s['properties']['title'] : s.get('merges', []) \
-                for s in sheets
+            # Get merged ranges for all sheets by name
+            self._merge_ranges_cache = {
+                s['properties']['title'] : s.get('merges', []) \
+                    for s in sheets
+            }
+        else:
+            print(f"Using cached merge ranges for spreadsheet: {self.spreadsheet_id}")
+        
+        return self._merge_ranges_cache
+
+    def retrieve_merge_ranges_for_sheets(self, sheet_names: list) -> dict:
+        """
+        Retrieve merged cell ranges only for specified sheets.
+        Filters the full merge ranges to only include requested sheets.
+        
+        Args:
+            sheet_names (list): List of sheet names to retrieve merge ranges for
+            
+        Returns:
+            dict: Dictionary mapping sheet names to their merge ranges (only for requested sheets)
+        """
+        # Get all merge ranges first
+        all_ranges = self.retrieve_all_merge_ranges()
+        
+        # Filter to only requested sheets
+        filtered_ranges = {
+            name: all_ranges.get(name, [])
+            for name in sheet_names
+            if name in all_ranges
         }
-        return(merged_ranges)
+        
+        return filtered_ranges
     
     ### --- API Requests --- ###
 

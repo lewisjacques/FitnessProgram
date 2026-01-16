@@ -38,9 +38,11 @@ class Sheet(ProgramBase):
            f"Please provide sheet_names separated by spaces. Given: {sheet_names}"
 
         # Get sheets with implicit name (Any month that has YY format) to be parsed
+        all_sheet_titles = self.get_sheet_titles()
+        
         explicit_format_months = [
-            s.title for s in self.get_worksheets() \
-                if re.search(" \d{2}", str(s.title)) is not None
+            s for s in all_sheet_titles \
+                if re.search(" \d{2}", str(s)) is not None
         ]
         
         # Check input tab names
@@ -53,8 +55,8 @@ class Sheet(ProgramBase):
         else:
             parse_sheets = sheet_names
 
-        # Retrieve all merge ranges for all sheets
-        self.merged_ranges = self.retrieve_all_merge_ranges()
+        # Retrieve merge ranges only for sheets we'll actually parse
+        self.merged_ranges = self.retrieve_merge_ranges_for_sheets(parse_sheets)
 
         # Initialise month-instances dictionary
         self.month_instances = self.parse_months(parse_sheets, clean_parsed_months)
@@ -90,13 +92,17 @@ class Sheet(ProgramBase):
         of the cell with the exercise
 
         Args:
-            explicit_format_months (list): List of months using the new methodology
+            parse_sheets (list): List of months using the new methodology
             where each element of the list represents a sheet tab
+            clean_parsed_months (bool): Whether to clean parsed months
         """
         month_instances = dict()
 
-        for month_sheet_name in parse_sheets:
-            print(f"\tParsing Sheet: {month_sheet_name}", end="")
+        # Sort sheets by date (format: "Mon YY" e.g., "Jan 24")
+        sorted_sheets = sorted(parse_sheets, key=lambda x: datetime.strptime(x, "%b %y"))
+
+        for month_sheet_name in sorted_sheets:
+            print(f"\n\tParsing Sheet: {month_sheet_name}", end=". ")
             # Get raw month data
             month_data = self.get_sheet(month_sheet_name).get_all_values()
             # Get merged ranges for this sheet
@@ -108,7 +114,6 @@ class Sheet(ProgramBase):
                 sheet_name=month_sheet_name,
                 merged_ranges=month_merged_ranges
             )
-            print(f": {month_instance}")
 
             ### --- Clean Month Sheets By Merging Unused Cells --- ###
 
@@ -144,7 +149,7 @@ class Sheet(ProgramBase):
         
     def add_new_month(self, new_month:datetime, clean=True):
         print(f"\n\t\tAdding New Month: {new_month.strftime('%b %y')}")
-        all_sheets = [s.title for s in self.get_worksheets()]
+        all_sheets = self.get_sheet_titles()
         
         new_month_meta = {
             "sheet_name": new_month.strftime("%b %y"),
@@ -157,6 +162,10 @@ class Sheet(ProgramBase):
             insert_sheet_index=len(all_sheets), 
             new_sheet_name=new_month_meta["sheet_name"]
         )
+
+        # Invalidate cached worksheet list since we just added a new sheet
+        self.invalidate_worksheet_cache()
+        self.invalidate_merge_ranges_cache()
 
         # Initialise duplicated sheet
         new_ws = self.get_sheet(new_month_meta["sheet_name"])
@@ -176,11 +185,11 @@ class Sheet(ProgramBase):
         }
 
         # Set day 1
-        new_ws.update(f"{day_mapping[first_day]}4", 1)
+        new_ws.update([[1]], f"{day_mapping[first_day]}4")
         # Give the template a title
-        new_ws.update("B2", new_month.strftime("%B %Y"))
+        new_ws.update([[new_month.strftime("%B %Y")]], "B2")
         # Give the template weeknumbers
-        new_ws.update("A5", int(new_month.replace(day=1).strftime("%V")))
+        new_ws.update([[int(new_month.replace(day=1).strftime("%V"))]], "A5")
 
         # Add it to the month_instances dictionary to get month_instances variables
         new_month_inst = self.process_new_month(
@@ -268,11 +277,11 @@ class Sheet(ProgramBase):
 
         # Set current week to be the week after the final week row number
         current_row_number = fw_row_number + session_length - 1
-        while current_row_number < 54:
+        if current_row_number < 54:
             self.merge_cells(
                 sheet_id=new_month_instance.sheet_id,
                 start_row=current_row_number,
-                end_row=current_row_number+session_length,
+                end_row=63,
                 start_col=1,
                 end_col=15, # Always going to be the right-most column
                 colour={"red":1, "green":0.976, "blue":0.905},
