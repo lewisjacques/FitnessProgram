@@ -1,10 +1,25 @@
 from program import Program
+from program_base import ProgramBase
 import argparse
+import time
+
+# Launch Agent notes
+
+# Add permissions to run the bash script fitness-daily-update.sh
+# chmod +x /usr/local/bin/fitness-daily-update.sh
+
+# Unload the config (if changed): launchctl unload ~/Library/LaunchAgents/com.fitness.daily-update
+# Load the config: launchctl load ~/Library/LaunchAgents/com.fitness.daily-update.plist
+# View loaded config: launchctl list | grep fitness
+# Force stop: launchctl stop com.fitness.daily-update
+# Test immediately: launchctl start com.fitness.daily-update
+# Check logs: tail -f ~/Library/CloudStorage/GoogleDrive-lewiswaite96@googlemail.com/My\ Drive/Projects/FitnessProgram/logs/launchagent_stdout.log
 
 # Currently updating sheets
-known_programs = ('lew', 'hope', 'test',)
+known_programs = ('lew', 'hope',)
 
 if __name__ == "__main__":
+    
     parser = argparse.ArgumentParser(
         prog='Fitness Program Functionality',
         description='Update the program with the latest comments'
@@ -73,7 +88,19 @@ if __name__ == "__main__":
     #!      and session numbers
 
     if args.program == "all":
-        for p in known_programs:
+        for i, p in enumerate(known_programs):
+            # Add delay between programs to avoid API rate limiting
+            if i > 0:
+                print("\nWaiting 60 seconds before next program to avoid API rate limits...")
+                time.sleep(60)
+            
+            # Clear caches before each program to avoid cross-program contamination
+            ProgramBase._g_sheet_cache.clear()
+            ProgramBase._worksheets_cache.clear()
+            ProgramBase._worksheet_dict_cache.clear()
+            ProgramBase._current_spreadsheet_id = None
+            ProgramBase._initialized = False  # Reset initialized flag so init_class_variables runs
+            
             prog = Program(
                 program_name=p,
                 reparse_legacy=args.reparse_legacy,
